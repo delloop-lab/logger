@@ -29,7 +29,7 @@ interface StepCut {
 export default function CutListDrawing() {
   const store = useAppStore();
   const boards = store?.boards || [];
-  const activeProjectName = store?.activeProjectName || 'Jewel Box Project';
+  const activeProjectName = store?.activeProjectName || 'New Project';
   const activeParts = store?.activeParts || [];
   const completedOperations = store?.completedOperations || [];
   const offcutSettings = store?.offcutSettings || { minLength: 100, minWidth: 100 };
@@ -53,11 +53,7 @@ export default function CutListDrawing() {
     thickness: Number(b?.dimensions?.thickness ?? b?.thickness ?? 18),
   });
 
-  const requiredParts = activeParts.length > 0 ? activeParts : [
-    { id: 'p-1', name: 'Top & Bottom', length: 300, width: 250, thickness: 18, quantity: 2, species: 'Pine / Pallet' },
-    { id: 'p-2', name: 'Sider F&B', length: 300, width: 200, thickness: 18, quantity: 2, species: 'Pine / Pallet' },
-    { id: 'p-3', name: 'Sides L&R', length: 250, width: 200, thickness: 18, quantity: 2, species: 'Pine / Pallet' },
-  ];
+  const requiredParts = activeParts;
 
   const cutPieces = requiredParts.flatMap((part) =>
     Array.from({ length: part.quantity }, (_, i) => ({
@@ -121,15 +117,26 @@ export default function CutListDrawing() {
 
   const selectedBoard = activeInventory.find((b) => (b.tagId || b.id) === lockedBoardId) || sortedCandidateBoards[0];
 
-  if (!selectedBoard || cutPieces.length === 0) {
+  if (cutPieces.length === 0) {
     return (
-      <div className="bg-[#1e2228] border border-red-500/40 p-8 rounded-2xl max-w-xl mx-auto text-center space-y-4 shadow-2xl font-sans mt-12">
+      <div className="bg-[#1e2228] border border-gray-800 p-8 rounded-2xl max-w-xl mx-auto text-center space-y-3 shadow-xl font-sans">
+        <h2 className="text-base font-bold text-white">No cut list yet</h2>
+        <p className="text-xs text-gray-400">
+          Add required parts to this project, then generate cutting instructions.
+        </p>
+      </div>
+    );
+  }
+
+  if (!selectedBoard) {
+    return (
+      <div className="bg-[#1e2228] border border-red-500/40 p-8 rounded-2xl max-w-xl mx-auto text-center space-y-4 shadow-2xl font-sans">
         <div className="w-12 h-12 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl flex items-center justify-center mx-auto">
           <AlertTriangle className="w-6 h-6" />
         </div>
         <h2 className="text-lg font-bold text-white tracking-wide">NO SUITABLE STOCK AVAILABLE</h2>
         <p className="text-xs text-gray-400 font-mono leading-relaxed">
-          Hierarchical stock selection failed: Available boards cannot accommodate required parts.
+          Log timber in Quick Log that matches the species and dimensions needed for this cut list.
         </p>
       </div>
     );

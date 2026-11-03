@@ -21,7 +21,7 @@ export default function CutListNesting() {
   const store = useAppStore();
   const boards = store?.boards || [];
   const savedProjects = store?.savedProjects || [];
-  const activeProjectName = store?.activeProjectName || 'Cutting Board';
+  const activeProjectName = store?.activeProjectName || 'New Project';
   const activeParts = store?.activeParts || [];
 
   const [partName, setPartName] = useState('');
@@ -30,7 +30,7 @@ export default function CutListNesting() {
   const [width, setWidth] = useState('');
   const [quantity, setQuantity] = useState('1');
 
-  const [isGenerated, setIsGenerated] = useState(true);
+  const [isGenerated, setIsGenerated] = useState(false);
 
   const handleStartNewProject = () => {
     if (activeParts.length > 0 && !confirm('Start a new project? This will clear your current cut list.')) {

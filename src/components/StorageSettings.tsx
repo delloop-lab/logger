@@ -2,13 +2,14 @@
 
 import React, { useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { Sliders, Save, Plus, Trash2 } from 'lucide-react';
+import { Sliders, Save, Plus, Trash2, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function StorageSettings() {
   const store = useAppStore();
   const settings = store?.offcutSettings || { minLength: 100, minWidth: 100 };
   const storageLocations = store?.storageLocations || [];
+  const resetWorkshopData = store.resetWorkshopData;
 
   const [minLength, setMinLength] = useState(settings.minLength.toString());
   const [minWidth, setMinWidth] = useState(settings.minWidth.toString());
@@ -126,6 +127,33 @@ export default function StorageSettings() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="bg-[#1e2228] border border-red-900/40 p-6 rounded-2xl space-y-3 shadow-xl">
+        <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <RotateCcw className="w-5 h-5 text-red-400" /> Reset workshop data
+        </h3>
+        <p className="text-xs text-gray-400">
+          Clears all boards, projects, cut lists and completed cut history on this device. Storage location names
+          and offcut rules are restored to defaults. This cannot be undone.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            if (
+              !confirm(
+                'Reset all TimberVault data on this device? Inventory and projects will be wiped.'
+              )
+            ) {
+              return;
+            }
+            resetWorkshopData();
+            toast.success('Workshop data cleared. Fresh start ready.');
+          }}
+          className="px-5 py-2.5 bg-red-950/50 hover:bg-red-600 text-red-300 hover:text-white border border-red-800/50 rounded-xl text-xs font-bold cursor-pointer"
+        >
+          Clear all local data
+        </button>
       </div>
     </div>
   );

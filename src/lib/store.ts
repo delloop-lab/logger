@@ -50,6 +50,17 @@ export interface SavedProject {
   parts: CutPart[];
 }
 
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description: string;
+  requiredSpecies: string[];
+  minLength: number;
+  minWidth: number;
+  minThickness: number;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+}
+
 export interface ConfirmationPayload {
   opKey: string;
   parentBoardTagId: string;
@@ -77,9 +88,9 @@ interface AppState {
   completedOperations: string[];
   offcutSettings: OffcutSettings;
 
-  // Inventory actions
   addBoard: (board: Board) => void;
   removeBoard: (id: string) => void;
+  updateBoard: (board: Board) => void;
   updateStorageLocations: (locations: string[]) => void;
   updateOffcutSettings: (settings: OffcutSettings) => void;
   processCuttingOperation: (
@@ -88,7 +99,6 @@ interface AppState {
     newBoards: Board[]
   ) => void;
 
-  // Project management actions
   setActiveProjectName: (name: string) => void;
   setActiveParts: (parts: CutPart[]) => void;
   addPartToActiveProject: (part: CutPart) => void;
@@ -97,48 +107,81 @@ interface AppState {
   loadProject: (id: string) => void;
   deleteProject: (id: string) => void;
   startNewProject: () => void;
+  resetWorkshopData: () => void;
 }
 
-const DEFAULT_BOARDS: Board[] = [
-  { id: 'b-012', tagId: 'PIN-012', species: 'Pine / Pallet', source: 'Pallet', length: 450, width: 75, thickness: 18, quantity: 1, location: 'Workbench', status: 'active', classification: 'reusable_offcut', createdAt: new Date().toISOString() },
-  { id: 'b-005', tagId: 'PIN-005', species: 'Pine / Pallet', source: 'Pallet', length: 450, width: 75, thickness: 18, quantity: 1, location: 'Workbench', status: 'active', classification: 'reusable_offcut', createdAt: new Date().toISOString() },
-  { id: 'b-004', tagId: 'PIN-004', species: 'Pine / Pallet', source: 'Pallet', length: 450, width: 75, thickness: 18, quantity: 1, location: 'Workbench', status: 'active', classification: 'reusable_offcut', createdAt: new Date().toISOString() },
-  { id: 'b-002', tagId: 'PIN-002', species: 'Pine / Pallet', source: 'Pallet', length: 450, width: 75, thickness: 18, quantity: 1, location: 'Workbench', status: 'active', classification: 'reusable_offcut', createdAt: new Date().toISOString() },
-  { id: 'b-003', tagId: 'PIN-003', species: 'Pine / Pallet', source: 'Pallet', length: 450, width: 75, thickness: 18, quantity: 1, location: 'Workbench', status: 'active', classification: 'reusable_offcut', createdAt: new Date().toISOString() },
-  { id: 'b-001', tagId: 'PIN-001', species: 'Pine / Pallet', source: 'Pallet', length: 450, width: 75, thickness: 18, quantity: 1, location: 'Workbench', status: 'active', classification: 'reusable_offcut', createdAt: new Date().toISOString() },
-  { id: 'b-007', tagId: 'WAL-007', species: 'Walnut', source: 'Salvaged', length: 600, width: 100, thickness: 20, quantity: 1, location: 'Small Rack', status: 'active', classification: 'reusable_offcut', createdAt: new Date().toISOString() },
+/** Fresh workshop defaults — no demo boards, no Jewel Case, no sample projects */
+export const DEFAULT_LOCATIONS = [
+  'Workbench',
+  'Rack 1',
+  'Rack 2',
+  'Rack 3',
+  'Small Rack',
+  'Under Cabinet',
+  'Offcut Bin',
 ];
 
-const DEFAULT_LOCATIONS = ['Workbench', 'Rack 1', 'Rack 2', 'Rack 3', 'Small Rack', 'Under Cabinet'];
-
-const DEFAULT_PROJECT_PARTS: CutPart[] = [
-  { id: '1', name: 'Cutting Board', species: 'Pine / Pallet', length: 350, width: 50, quantity: 6 },
-  { id: '2', name: 'Rails', species: 'Walnut', length: 300, width: 25, quantity: 2 },
+export const PROJECT_TEMPLATES: ProjectTemplate[] = [
+  {
+    id: 'tpl-cutting-board',
+    name: 'End-Grain Cutting Board',
+    description: 'Classic butcher-block style board from mixed hardwood scraps.',
+    requiredSpecies: ['European Oak', 'Walnut', 'Maple'],
+    minLength: 300,
+    minWidth: 50,
+    minThickness: 30,
+    difficulty: 'Intermediate',
+  },
+  {
+    id: 'tpl-coasters',
+    name: 'Minimalist Coaster Set',
+    description: 'Set of four square coasters with chamfered edges.',
+    requiredSpecies: ['European Oak', 'Walnut', 'Maple'],
+    minLength: 100,
+    minWidth: 100,
+    minThickness: 12,
+    difficulty: 'Beginner',
+  },
+  {
+    id: 'tpl-mallet',
+    name: 'Shop Mallet',
+    description: 'Heavy-duty workshop mallet laminated from offcuts.',
+    requiredSpecies: ['European Oak', 'Pine / Pallet', 'Maple'],
+    minLength: 200,
+    minWidth: 60,
+    minThickness: 40,
+    difficulty: 'Beginner',
+  },
 ];
+
+const FRESH_STATE = {
+  boards: [] as Board[],
+  storageLocations: [...DEFAULT_LOCATIONS],
+  activeProjectName: 'New Project',
+  activeParts: [] as CutPart[],
+  savedProjects: [] as SavedProject[],
+  completedOperations: [] as string[],
+  offcutSettings: {
+    minLength: 100,
+    minWidth: 100,
+  },
+};
 
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      boards: DEFAULT_BOARDS,
-      storageLocations: DEFAULT_LOCATIONS,
-      activeProjectName: 'Cutting Board',
-      activeParts: DEFAULT_PROJECT_PARTS,
-      savedProjects: [
-        {
-          id: 'proj-default-1',
-          name: 'Cutting Board',
-          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-          parts: DEFAULT_PROJECT_PARTS,
-        },
-      ],
-      completedOperations: [],
-      offcutSettings: {
-        minLength: 100,
-        minWidth: 100,
-      },
+      ...FRESH_STATE,
 
       addBoard: (board) => set((state) => ({ boards: [board, ...state.boards] })),
-      removeBoard: (id) => set((state) => ({ boards: state.boards.filter((b) => b.id !== id) })),
+
+      removeBoard: (id) =>
+        set((state) => ({ boards: state.boards.filter((b) => b.id !== id) })),
+
+      updateBoard: (board) =>
+        set((state) => ({
+          boards: state.boards.map((b) => (b.id === board.id ? board : b)),
+        })),
+
       updateStorageLocations: (locations) => set({ storageLocations: locations }),
       updateOffcutSettings: (settings) => set({ offcutSettings: settings }),
 
@@ -162,7 +205,7 @@ export const useAppStore = create<AppState>()(
 
       setActiveProjectName: (name) => set({ activeProjectName: name }),
       setActiveParts: (parts) => set({ activeParts: parts }),
-      
+
       addPartToActiveProject: (part) =>
         set((state) => ({ activeParts: [...state.activeParts, part] })),
 
@@ -180,7 +223,11 @@ export const useAppStore = create<AppState>()(
         const projectData: SavedProject = {
           id: existingIdx >= 0 ? savedProjects[existingIdx].id : Date.now().toString(),
           name: activeProjectName.trim(),
-          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          date: new Date().toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          }),
           parts: activeParts,
         };
 
@@ -201,15 +248,20 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteProject: (id) => {
-        set((state) => ({ savedProjects: state.savedProjects.filter((p) => p.id !== id) }));
+        set((state) => ({
+          savedProjects: state.savedProjects.filter((p) => p.id !== id),
+        }));
       },
 
       startNewProject: () => {
-        set({ activeProjectName: 'New Project / Build', activeParts: [] });
+        set({ activeProjectName: 'New Project', activeParts: [] });
       },
+
+      resetWorkshopData: () => set({ ...FRESH_STATE }),
     }),
     {
-      name: 'timbervault_storage',
+      name: 'timbervault_v2',
+      version: 1,
     }
   )
 );
