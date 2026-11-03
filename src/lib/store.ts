@@ -96,7 +96,8 @@ interface AppState {
   processCuttingOperation: (
     opKey: string,
     parentBoardTagId: string,
-    newBoards: Board[]
+    newBoards: Board[],
+    options?: { consumeParent?: boolean }
   ) => void;
 
   setActiveProjectName: (name: string) => void;
@@ -185,12 +186,16 @@ export const useAppStore = create<AppState>()(
       updateStorageLocations: (locations) => set({ storageLocations: locations }),
       updateOffcutSettings: (settings) => set({ offcutSettings: settings }),
 
-      processCuttingOperation: (opKey, parentBoardTagId, newBoards) => {
+      processCuttingOperation: (opKey, parentBoardTagId, newBoards, options) => {
         set((state) => {
           if (state.completedOperations.includes(opKey)) return state;
+          const consumeParent = options?.consumeParent ?? true;
 
           const updatedBoards = state.boards.map((b) => {
-            if (b.tagId === parentBoardTagId || b.id === parentBoardTagId) {
+            if (
+              consumeParent &&
+              (b.tagId === parentBoardTagId || b.id === parentBoardTagId)
+            ) {
               return { ...b, status: 'consumed' as const };
             }
             return b;

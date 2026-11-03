@@ -25,10 +25,19 @@ export default function InventoryList() {
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
   const [sortField, setSortField] = useState<SortField>('tagId');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'consumed'>('active');
+  const [speciesFilter, setSpeciesFilter] = useState('all');
+
+  const speciesOptions = Array.from(new Set(boards.map((b) => b.species).filter(Boolean))).sort();
 
   const uniqueBoards = Array.from(
     new Map(boards.map((b) => [b.id || b.tagId, b])).values()
-  );
+  ).filter((b) => {
+    if (statusFilter === 'active' && b.status === 'consumed') return false;
+    if (statusFilter === 'consumed' && b.status !== 'consumed') return false;
+    if (speciesFilter !== 'all' && b.species !== speciesFilter) return false;
+    return true;
+  });
 
   uniqueBoards.sort((a, b) => {
     let valA = a[sortField];
@@ -83,6 +92,27 @@ export default function InventoryList() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'active' | 'all' | 'consumed')}
+            className="bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-semibold cursor-pointer"
+          >
+            <option value="active">Available</option>
+            <option value="consumed">Consumed</option>
+            <option value="all">All statuses</option>
+          </select>
+          <select
+            value={speciesFilter}
+            onChange={(e) => setSpeciesFilter(e.target.value)}
+            className="bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-semibold cursor-pointer"
+          >
+            <option value="all">All species</option>
+            {speciesOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
           <div className="flex items-center gap-2 bg-[#121417] px-3 py-2 rounded-xl border border-gray-800 text-xs">
             <ArrowUpDown className="w-3.5 h-3.5 text-orange-500" />
             <span className="text-gray-400">Sort by:</span>
@@ -100,6 +130,7 @@ export default function InventoryList() {
               <option value="location" className="bg-[#121417]">Location</option>
             </select>
             <button
+              type="button"
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
               className="text-orange-400 hover:text-orange-300 font-bold px-1.5 py-0.5 rounded bg-gray-800 text-[10px]"
             >
@@ -108,7 +139,7 @@ export default function InventoryList() {
           </div>
 
           <span className="text-xs bg-gray-800 text-orange-400 font-mono px-3 py-2 rounded-xl border border-gray-700">
-            Total Stock: <strong className="text-white">{uniqueBoards.length} items</strong>
+            Showing: <strong className="text-white">{uniqueBoards.length}</strong>
           </span>
         </div>
       </div>
@@ -127,6 +158,7 @@ export default function InventoryList() {
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('source')}>Source</th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('length')}>Dimensions (L × W × T)</th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('location')}>Location</th>
+                <th className="p-3">Status</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -141,8 +173,16 @@ export default function InventoryList() {
                   <td className="p-3 text-gray-200">
                     {b.length} × {b.width} × {b.thickness} mm
                   </td>
-                  <td className="p-3 text-emerald-400 flex items-center gap-1 font-sans">
-                    <MapPin className="w-3.5 h-3.5" /> {b.location || 'Workbench'}
+                  <td className="p-3 text-emerald-400">
+                    <span className="inline-flex items-center gap-1 font-sans">
+                      <MapPin className="w-3.5 h-3.5" /> {b.location || 'Workbench'}
+                    </span>
+                  </td>
+                  <td className="p-3">
+                    <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-gray-700 px-2 py-0.5 rounded">
+                      {b.status}
+                      {b.classification ? ` · ${b.classification}` : ''}
+                    </span>
                   </td>
                   <td className="p-3 text-right space-x-1">
                     <button

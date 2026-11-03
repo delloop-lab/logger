@@ -1,30 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAppStore, Board, BoardClassification } from '@/lib/store';
+import { createCuttingPlan, type Placement } from '@/lib/cutting-engine';
 import { Printer, CheckCircle2, ShieldCheck, Scissors, Box, AlertTriangle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-interface StepCut {
-  stepIndex: number;
-  boardTag: string;
-  species: string;
-  source: string;
-  location: string;
-  partName: string;
-  stockLen: number;
-  stockWid: number;
-  cutLen: number;
-  cutWid: number;
-  posX: number;
-  posY: number;
-  kerf: number;
-  isRip: boolean;
-  isCrosscut: boolean;
-  remLen: number;
-  remWid: number;
-  thickness: number;
-}
 
 export default function CutListDrawing() {
   const store = useAppStore();
@@ -34,175 +14,48 @@ export default function CutListDrawing() {
   const completedOperations = store?.completedOperations || [];
   const offcutSettings = store?.offcutSettings || { minLength: 100, minWidth: 100 };
 
-  const [confirmStep, setConfirmStep] = useState<StepCut | null>(null);
+  const [confirmStep, setConfirmStep] = useState<Placement | null>(null);
   const [overrideClassification, setOverrideClassification] = useState<BoardClassification | null>(null);
   const [customRemLen, setCustomRemLen] = useState<number>(0);
   const [customRemWid, setCustomRemWid] = useState<number>(0);
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const KERF = 3.2;
-
-  const activeInventory = boards.filter((b) => b.status !== 'consumed');
-
-  const getBoardDimensions = (b: any) => ({
-    length: Number(b?.dimensions?.length ?? b?.length ?? 0),
-    width: Number(b?.dimensions?.width ?? b?.width ?? 0),
-    thickness: Number(b?.dimensions?.thickness ?? b?.thickness ?? 18),
-  });
-
-  const requiredParts = activeParts;
-
-  const cutPieces = requiredParts.flatMap((part) =>
-    Array.from({ length: part.quantity }, (_, i) => ({
-      id: `${part.id}-${i + 1}`,
-      name: `${part.name} (${i + 1}/${part.quantity})`,
-      length: part.length,
-      width: part.width,
-      thickness: part.thickness || 18,
-      species: part.species,
-    }))
+  const plan = useMemo(
+    () =>
+      createCuttingPlan(
+        boards.map((b) => ({
+          id: b.id,
+          tagId: b.tagId,
+          species: b.species,
+          source: b.source,
+          location: b.location,
+          length: Number(b.dimensions?.length ?? b.length ?? 0),
+          width: Number(b.dimensions?.width ?? b.width ?? 0),
+          thickness: Number(b.dimensions?.thickness ?? b.thickness ?? 18),
+          status: b.status,
+        })),
+        activeParts.map((p) => ({
+          id: p.id,
+          name: p.name,
+          species: p.species,
+          length: p.length,
+          width: p.width,
+          thickness: p.thickness || 18,
+          quantity: p.quantity,
+        }))
+      ),
+    [boards, activeParts]
   );
 
-  const targetSpecies = 'pine / pallet';
+  const physicalSteps = plan.placements;
 
-  const boardCanFitPart = (bDims: { length: number; width: number; thickness: number }, part: { length: number; width: number; thickness: number }) => {
-    if (bDims.thickness < part.thickness - 0.1) return false;
-    const directFit = bDims.length >= part.length && bDims.width >= part.width;
-    const rotatedFit = bDims.length >= part.width && bDims.width >= part.length;
-    return directFit || rotatedFit;
-  };
+  const handlePrint = () => window.print();
 
-  const speciesMatchedBoards = activeInventory.filter((b) => {
-    const bSpecies = (b.species || '').toLowerCase().trim();
-    return bSpecies === targetSpecies || bSpecies.includes('pine');
-  });
-
-  const sortedCandidateBoards = speciesMatchedBoards.sort((a, b) => {
-    const dimsA = getBoardDimensions(a);
-    const dimsB = getBoardDimensions(b);
-    return (dimsA.length * dimsA.width) - (dimsB.length * dimsB.width);
-  });
-
-  // Lazy initializer state to compute and permanently lock the chosen board ID once on mount
-  const [lockedBoardId, setLockedBoardId] = useState<string>(() => {
-    let chosen: Board | null = null;
-    
-    // Tier 1: Check small/partial stock boards first
-    for (const board of sortedCandidateBoards) {
-      const dims = getBoardDimensions(board);
-      const fitsAny = cutPieces.some(p => boardCanFitPart(dims, p));
-      if (fitsAny && dims.length * dims.width < 100000) {
-        chosen = board;
-        break;
-      }
-    }
-
-    // Tier 2: Step up to larger inventory if small stock fails
-    if (!chosen) {
-      for (const board of sortedCandidateBoards) {
-        const dims = getBoardDimensions(board);
-        const totalCutArea = cutPieces.reduce((sum, p) => sum + (p.length * p.width), 0);
-        if (dims.length * dims.width >= totalCutArea && boardCanFitPart(dims, cutPieces[0])) {
-          chosen = board;
-          break;
-        }
-      }
-    }
-
-    return chosen ? (chosen.tagId || chosen.id) : (sortedCandidateBoards[0]?.tagId || sortedCandidateBoards[0]?.id || '');
-  });
-
-  const selectedBoard = activeInventory.find((b) => (b.tagId || b.id) === lockedBoardId) || sortedCandidateBoards[0];
-
-  if (cutPieces.length === 0) {
-    return (
-      <div className="bg-[#1e2228] border border-gray-800 p-8 rounded-2xl max-w-xl mx-auto text-center space-y-3 shadow-xl font-sans">
-        <h2 className="text-base font-bold text-white">No cut list yet</h2>
-        <p className="text-xs text-gray-400">
-          Add required parts to this project, then generate cutting instructions.
-        </p>
-      </div>
-    );
-  }
-
-  if (!selectedBoard) {
-    return (
-      <div className="bg-[#1e2228] border border-red-500/40 p-8 rounded-2xl max-w-xl mx-auto text-center space-y-4 shadow-2xl font-sans">
-        <div className="w-12 h-12 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl flex items-center justify-center mx-auto">
-          <AlertTriangle className="w-6 h-6" />
-        </div>
-        <h2 className="text-lg font-bold text-white tracking-wide">NO SUITABLE STOCK AVAILABLE</h2>
-        <p className="text-xs text-gray-400 font-mono leading-relaxed">
-          Log timber in Quick Log that matches the species and dimensions needed for this cut list.
-        </p>
-      </div>
-    );
-  }
-
-  const boardDims = getBoardDimensions(selectedBoard);
-
-  // Generate 2D cutting steps
-  const physicalSteps: StepCut[] = [];
-  let cursorX = 0;
-  let cursorY = 0;
-  let rowMaxHeight = 0;
-
-  cutPieces.forEach((cut, idx) => {
-    let cutLen = cut.length;
-    let cutWid = cut.width;
-
-    if (cursorX + cutLen + KERF > boardDims.length) {
-      cursorX = 0;
-      cursorY += rowMaxHeight + KERF;
-      rowMaxHeight = 0;
-    }
-
-    if (cursorY + cutWid > boardDims.width) {
-      const temp = cutLen;
-      cutLen = cutWid;
-      cutWid = temp;
-    }
-
-    if (cutWid > rowMaxHeight) {
-      rowMaxHeight = cutWid;
-    }
-
-    const remLen = Math.max(0, boardDims.length - (cursorX + cutLen));
-    const remWid = Math.max(0, boardDims.width - (cursorY + cutWid));
-
-    physicalSteps.push({
-      stepIndex: idx + 1,
-      boardTag: selectedBoard.tagId || selectedBoard.id,
-      species: selectedBoard.species,
-      source: selectedBoard.source || 'Stock',
-      location: selectedBoard.location || 'Workshop',
-      partName: cut.name,
-      stockLen: boardDims.length,
-      stockWid: boardDims.width,
-      cutLen,
-      cutWid,
-      posX: cursorX,
-      posY: cursorY,
-      kerf: KERF,
-      isRip: true,
-      isCrosscut: true,
-      remLen,
-      remWid,
-      thickness: boardDims.thickness,
-    });
-
-    cursorX += cutLen + KERF;
-  });
-
-  const openConfirmationModal = (step: StepCut) => {
+  const openConfirmationModal = (step: Placement) => {
     setConfirmStep(step);
     setCustomRemLen(step.remLen);
     setCustomRemWid(step.remWid);
-
-    const isWaste = step.remLen < offcutSettings.minLength && step.remWid < offcutSettings.minWidth;
+    const isWaste =
+      step.remLen < offcutSettings.minLength && step.remWid < offcutSettings.minWidth;
     setOverrideClassification(isWaste ? 'waste' : 'reusable_offcut');
   };
 
@@ -214,6 +67,12 @@ export default function CutListDrawing() {
       toast.error('Operation already completed!');
       return;
     }
+
+    const stepsOnBoard = physicalSteps.filter((s) => s.boardTag === confirmStep.boardTag);
+    const completedOnBoard = stepsOnBoard.filter((s) =>
+      completedOperations.includes(`${activeProjectName}-${s.stepIndex}-${s.boardTag}`)
+    ).length;
+    const isLastOnBoard = completedOnBoard + 1 >= stepsOnBoard.length;
 
     const timestamp = new Date().toISOString();
 
@@ -242,9 +101,10 @@ export default function CutListDrawing() {
 
     const newRecords: Board[] = [finishedPartBoard];
 
-    if (customRemLen > 0 && customRemWid > 0) {
+    // Offcuts / waste only when the parent board is fully cut
+    if (isLastOnBoard && customRemLen > 0 && customRemWid > 0) {
       const isReusable = overrideClassification === 'reusable_offcut';
-      const offcutBoard: Board = {
+      newRecords.push({
         id: `off-${Date.now()}-${confirmStep.stepIndex}`,
         tagId: `${confirmStep.boardTag}-OP${confirmStep.stepIndex}-${isReusable ? 'OFFCUT' : 'WASTE'}`,
         species: confirmStep.species,
@@ -263,25 +123,62 @@ export default function CutListDrawing() {
         classification: overrideClassification || 'reusable_offcut',
         parentBoardId: confirmStep.boardTag,
         originProject: activeProjectName,
-        notes: `Resulting offcut from operation #${confirmStep.stepIndex}`,
+        notes: `Resulting offcut from final operation on ${confirmStep.boardTag}`,
         createdAt: timestamp,
-      };
-      newRecords.push(offcutBoard);
+      });
     }
 
-    store.processCuttingOperation(opKey, confirmStep.boardTag, newRecords);
-    toast.success('MARK CUT COMPLETE: Inventory updated successfully!');
+    store.processCuttingOperation(opKey, confirmStep.boardTag, newRecords, {
+      consumeParent: isLastOnBoard,
+    });
+    toast.success(
+      isLastOnBoard
+        ? 'Cut complete — parent board consumed and inventory updated.'
+        : 'Cut complete — finished piece added. Parent board kept for remaining cuts.'
+    );
     setConfirmStep(null);
   };
+
+  if (activeParts.length === 0) {
+    return (
+      <div className="bg-[#1e2228] border border-gray-800 p-8 rounded-2xl max-w-xl mx-auto text-center space-y-3 shadow-xl font-sans">
+        <h2 className="text-base font-bold text-white">No cut list yet</h2>
+        <p className="text-xs text-gray-400">
+          Add required parts to this project, then generate cutting instructions.
+        </p>
+      </div>
+    );
+  }
+
+  if (physicalSteps.length === 0) {
+    return (
+      <div className="bg-[#1e2228] border border-red-500/40 p-8 rounded-2xl max-w-xl mx-auto text-center space-y-4 shadow-2xl font-sans">
+        <div className="w-12 h-12 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-bold text-white tracking-wide">NO SUITABLE STOCK AVAILABLE</h2>
+        <p className="text-xs text-gray-400 font-mono leading-relaxed">
+          No board matches the species and dimensions for this cut list. Log suitable timber in Quick Log.
+        </p>
+        {plan.unallocated.length > 0 && (
+          <p className="text-[11px] text-orange-400 font-mono">
+            Unallocated pieces: {plan.unallocated.length}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 font-sans">
       <div className="bg-[#1e2228] border border-gray-800 p-4 rounded-xl shadow-xl space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <span className="text-xs font-mono text-gray-300">
-            TimberVault Stable Cut Sheet - Project: <strong className="text-white uppercase">{activeProjectName}</strong>
+            Cut plan — Project:{' '}
+            <strong className="text-white uppercase">{activeProjectName}</strong>
           </span>
           <button
+            type="button"
             onClick={handlePrint}
             className="print:hidden flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-600/30 cursor-pointer"
           >
@@ -289,17 +186,36 @@ export default function CutListDrawing() {
           </button>
         </div>
 
-        <div className="bg-[#121417] p-3 rounded-lg border border-gray-800 text-xs font-mono">
-          <div className="text-orange-400 font-bold mb-2 flex items-center gap-2">
-            <Box className="w-4 h-4" /> PERMANENTLY LOCKED STOCK BOARD:
+        <div className="bg-[#121417] p-3 rounded-lg border border-gray-800 text-xs font-mono space-y-2">
+          <div className="text-orange-400 font-bold flex items-center gap-2">
+            <Box className="w-4 h-4" /> Allocated stock boards
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-            <div className="bg-[#1e2228] p-2.5 rounded border border-emerald-500/50 text-white">
-              <div>Tag: <strong className="text-emerald-400">{selectedBoard.tagId || selectedBoard.id}</strong></div>
-              <div className="text-gray-300 text-[11px]">{selectedBoard.species} ({boardDims.length}mm L × {boardDims.width}mm W × {boardDims.thickness}mm T)</div>
-              <div className="text-gray-400 text-[10px]">Source: {selectedBoard.source || 'Stock'} | Location: {selectedBoard.location || 'Workshop'}</div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {plan.usedBoardTags.map((tag) => {
+              const board = boards.find((b) => b.tagId === tag || b.id === tag);
+              return (
+                <div
+                  key={tag}
+                  className="bg-[#1e2228] p-2.5 rounded border border-emerald-500/50 text-white"
+                >
+                  <div>
+                    Tag: <strong className="text-emerald-400">{tag}</strong>
+                  </div>
+                  {board && (
+                    <div className="text-gray-300 text-[11px]">
+                      {board.species} ({board.length}×{board.width}×{board.thickness} mm) ·{' '}
+                      {board.source}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+          {plan.unallocated.length > 0 && (
+            <p className="text-orange-400 text-[11px]">
+              Warning: {plan.unallocated.length} piece(s) could not be nested on available stock.
+            </p>
+          )}
         </div>
       </div>
 
@@ -311,31 +227,31 @@ export default function CutListDrawing() {
           const aspectRatio = step.stockLen / step.stockWid;
           const svgW = 720;
           const svgH = Math.round(720 / aspectRatio) + 80;
-          
           const marginX = 90;
           const marginY = 50;
           const drawW = svgW - marginX * 2;
           const drawH = svgH - marginY * 2;
-
           const scaleX = drawW / step.stockLen;
           const scaleY = drawH / step.stockWid;
-
           const boardW = step.stockLen * scaleX;
           const boardH = step.stockWid * scaleY;
-
           const partX = marginX + step.posX * scaleX;
           const partY = marginY + step.posY * scaleY;
           const partW = step.cutLen * scaleX;
           const partH = step.cutWid * scaleY;
 
+          const priorOnSameBoard = physicalSteps.filter(
+            (s) => s.boardTag === step.boardTag && s.stepIndex < step.stepIndex
+          );
+
           return (
             <div
-              key={step.stepIndex}
+              key={`${step.boardTag}-${step.stepIndex}`}
               className="bg-white text-zinc-900 border-2 border-zinc-900 p-6 rounded-lg shadow-md space-y-5 print:border-black print:shadow-none print:break-inside-avoid"
               style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
             >
               <div className="flex justify-between items-center border-b-2 border-zinc-900 pb-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <span className="bg-zinc-900 text-white font-mono text-sm px-3 py-1 font-bold">
                     STEP {step.stepIndex} OF {physicalSteps.length}
                   </span>
@@ -355,20 +271,46 @@ export default function CutListDrawing() {
                   <div className="font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-300 pb-1 mb-2">
                     <Box className="w-4 h-4 text-orange-600" /> WHAT TO PULL (STOCK):
                   </div>
-                  <div>Tag Ref: <strong className="text-zinc-900">{step.boardTag}</strong></div>
-                  <div>Species: <strong className="text-zinc-900">{step.species}</strong></div>
-                  <div>Location: <strong className="text-zinc-900">{step.location}</strong></div>
-                  <div>Board Dimensions: <strong className="text-zinc-900">{step.stockLen}mm L × {step.stockWid}mm W × {step.thickness}mm T</strong></div>
+                  <div>
+                    Tag Ref: <strong className="text-zinc-900">{step.boardTag}</strong>
+                  </div>
+                  <div>
+                    Species: <strong className="text-zinc-900">{step.species}</strong>
+                  </div>
+                  <div>
+                    Location: <strong className="text-zinc-900">{step.location}</strong>
+                  </div>
+                  <div>
+                    Board Dimensions:{' '}
+                    <strong className="text-zinc-900">
+                      {step.stockLen}mm L × {step.stockWid}mm W × {step.thickness}mm T
+                    </strong>
+                  </div>
                 </div>
 
                 <div className="bg-zinc-50 p-4 border border-zinc-300 rounded space-y-1">
                   <div className="font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-300 pb-1 mb-2">
                     <Scissors className="w-4 h-4 text-emerald-600" /> WHAT TO CUT:
                   </div>
-                  <div>Target Part: <strong className="text-zinc-900">{step.partName}</strong></div>
-                  <div>Cut Size: <strong className="text-zinc-900">{step.cutLen}mm × {step.cutWid}mm</strong></div>
-                  <div>Position: <strong className="text-zinc-900">X: {step.posX}mm, Y: {step.posY}mm</strong></div>
-                  <div>Saw Kerf: <strong className="text-zinc-900">{step.kerf}mm</strong></div>
+                  <div>
+                    Target Part: <strong className="text-zinc-900">{step.partName}</strong>
+                  </div>
+                  <div>
+                    Cut Size:{' '}
+                    <strong className="text-zinc-900">
+                      {step.cutLen}mm × {step.cutWid}mm
+                      {step.rotated ? ' (rotated)' : ''}
+                    </strong>
+                  </div>
+                  <div>
+                    Position:{' '}
+                    <strong className="text-zinc-900">
+                      X: {step.posX}mm, Y: {step.posY}mm
+                    </strong>
+                  </div>
+                  <div>
+                    Saw Kerf: <strong className="text-zinc-900">{step.kerf}mm</strong>
+                  </div>
                 </div>
               </div>
 
@@ -381,7 +323,7 @@ export default function CutListDrawing() {
                 }}
               >
                 <div className="text-[11px] font-mono font-bold text-zinc-700 mb-2 uppercase tracking-wide">
-                  Stock Layout & Placement (Step {step.stepIndex} of {physicalSteps.length}):
+                  Stock layout — prior cuts shown in grey, current cut in orange
                 </div>
                 <div className="flex justify-center overflow-x-auto py-2">
                   <svg
@@ -390,23 +332,31 @@ export default function CutListDrawing() {
                     style={{ strokeLinecap: 'square' }}
                   >
                     <defs>
-                      <pattern id={`wood-grain-${step.stepIndex}`} width="40" height="12" patternUnits="userSpaceOnUse">
+                      <pattern
+                        id={`wood-grain-${step.stepIndex}`}
+                        width="40"
+                        height="12"
+                        patternUnits="userSpaceOnUse"
+                      >
                         <rect width="40" height="12" fill="#e6cca8" />
-                        <path d="M 0 3 Q 10 1, 20 3 T 40 3" fill="none" stroke="#d4b48c" strokeWidth="0.8" />
-                        <path d="M 0 9 Q 15 7, 25 9 T 40 9" fill="none" stroke="#d4b48c" strokeWidth="0.7" />
+                        <path
+                          d="M 0 3 Q 10 1, 20 3 T 40 3"
+                          fill="none"
+                          stroke="#d4b48c"
+                          strokeWidth="0.8"
+                        />
                       </pattern>
                     </defs>
 
-                    <line x1={marginX} y1="24" x2={marginX + boardW} y2="24" stroke="#18181b" strokeWidth="0.8" />
-                    <line x1={marginX} y1="18" x2={marginX} y2="30" stroke="#18181b" strokeWidth="1" />
-                    <line x1={marginX + boardW} y1="18" x2={marginX + boardW} y2="30" stroke="#18181b" strokeWidth="1" />
-                    <text x={marginX + boardW / 2} y="16" fill="#18181b" textAnchor="middle" fontWeight="bold">
+                    <text
+                      x={marginX + boardW / 2}
+                      y="16"
+                      fill="#18181b"
+                      textAnchor="middle"
+                      fontWeight="bold"
+                    >
                       LENGTH: {step.stockLen} mm
                     </text>
-
-                    <line x1="35" y1={marginY} x2="35" y2={marginY + boardH} stroke="#18181b" strokeWidth="0.8" />
-                    <line x1="29" y1={marginY} x2="41" y2={marginY} stroke="#18181b" strokeWidth="1" />
-                    <line x1="29" y1={marginY + boardH} x2="41" y2={marginY + boardH} stroke="#18181b" strokeWidth="1" />
                     <text
                       x="22"
                       y={marginY + boardH / 2}
@@ -427,6 +377,19 @@ export default function CutListDrawing() {
                       stroke="#27272a"
                       strokeWidth="1.5"
                     />
+
+                    {priorOnSameBoard.map((prior) => (
+                      <rect
+                        key={`prior-${prior.stepIndex}`}
+                        x={marginX + prior.posX * scaleX}
+                        y={marginY + prior.posY * scaleY}
+                        width={prior.cutLen * scaleX}
+                        height={prior.cutWid * scaleY}
+                        fill="#d4d4d8"
+                        stroke="#71717a"
+                        strokeWidth="1"
+                      />
+                    ))}
 
                     <rect
                       x={partX}
@@ -449,13 +412,18 @@ export default function CutListDrawing() {
 
               <div className="border-t border-zinc-300 pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="text-xs font-mono text-zinc-700 space-y-0.5">
-                  <div>• Position cut at X: {step.posX}mm, Y: {step.posY}mm on stock.</div>
-                  <div>• Yields target part: <strong>{step.partName}</strong> ({step.cutLen}mm × {step.cutWid}mm).</div>
+                  <div>
+                    • Position cut at X: {step.posX}mm, Y: {step.posY}mm on stock.
+                  </div>
+                  <div>
+                    • Yields: <strong>{step.partName}</strong> ({step.cutLen}mm × {step.cutWid}mm).
+                  </div>
                 </div>
 
                 <div className="print:hidden w-full sm:w-auto">
                   {!isCompleted && (
                     <button
+                      type="button"
                       onClick={() => openConfirmationModal(step)}
                       className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow flex items-center justify-center gap-2 cursor-pointer"
                     >
@@ -470,7 +438,7 @@ export default function CutListDrawing() {
       </div>
 
       {confirmStep && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans">
           <div className="bg-[#181b20] border border-gray-700/80 rounded-2xl max-w-lg w-full p-6 space-y-6 text-white shadow-2xl relative">
             <div className="flex items-center justify-between border-b border-gray-800 pb-4">
               <div className="flex items-center gap-3">
@@ -479,12 +447,13 @@ export default function CutListDrawing() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white tracking-wide">Confirm Physical Cut</h3>
-                  <p className="text-[11px] text-gray-400 font-mono">Atomic Inventory Synchronization</p>
+                  <p className="text-[11px] text-gray-400 font-mono">Inventory update</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setConfirmStep(null)}
-                className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -496,68 +465,61 @@ export default function CutListDrawing() {
                 <strong className="text-white">{confirmStep.boardTag}</strong>
               </div>
               <div className="flex justify-between border-b border-gray-800/50 pb-2">
-                <span className="text-gray-400">Species & Source:</span>
-                <strong className="text-gray-200">{confirmStep.species}</strong>
-              </div>
-              <div className="flex justify-between border-b border-gray-800/50 pb-2">
                 <span className="text-gray-400">Yielding Part:</span>
                 <strong className="text-orange-400">{confirmStep.partName}</strong>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">Deducted Saw Kerf:</span>
+                <span className="text-gray-400">Saw Kerf:</span>
                 <strong className="text-red-400">{confirmStep.kerf} mm</strong>
               </div>
             </div>
 
             <div className="space-y-4">
-              <label className="block text-xs font-bold text-gray-300 uppercase font-mono tracking-wider">
-                Resulting Offcut & Waste Classification
-              </label>
-
+              <p className="text-[11px] text-gray-400">
+                Offcut / waste is recorded when the final cut on this board is confirmed.
+              </p>
               <div className="grid grid-cols-2 gap-3 font-mono text-xs">
                 <div>
-                  <label className="block text-[11px] text-gray-400 mb-1">Actual Rem Length (mm)</label>
+                  <label className="block text-[11px] text-gray-400 mb-1">Rem Length (mm)</label>
                   <input
                     type="number"
                     value={customRemLen}
                     onChange={(e) => setCustomRemLen(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-gray-400 mb-1">Actual Rem Width (mm)</label>
+                  <label className="block text-[11px] text-gray-400 mb-1">Rem Width (mm)</label>
                   <input
                     type="number"
                     value={customRemWid}
                     onChange={(e) => setCustomRemWid(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
-
-              <div>
-                <label className="block text-[11px] text-gray-400 mb-1.5 font-mono">Classification Status</label>
-                <select
-                  value={overrideClassification || 'reusable_offcut'}
-                  onChange={(e) => setOverrideClassification(e.target.value as BoardClassification)}
-                  className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-semibold focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
-                >
-                  <option value="reusable_offcut">Reusable Offcut (Added to Available Inventory)</option>
-                  <option value="waste">Waste (Archived; Excluded from Active Inventory)</option>
-                </select>
-              </div>
+              <select
+                value={overrideClassification || 'reusable_offcut'}
+                onChange={(e) => setOverrideClassification(e.target.value as BoardClassification)}
+                className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-white font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer"
+              >
+                <option value="reusable_offcut">Reusable Offcut</option>
+                <option value="waste">Waste</option>
+              </select>
             </div>
 
             <div className="flex gap-3 pt-2">
               <button
+                type="button"
                 onClick={() => setConfirmStep(null)}
-                className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-bold cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={executeAtomicInventoryUpdate}
-                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" /> Confirm & Update Stock
               </button>
