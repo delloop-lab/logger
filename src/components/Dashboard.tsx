@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, DEFAULT_LOCATIONS } from '@/lib/store';
 import { Layers, Package, Scissors, MapPin, PlusCircle } from 'lucide-react';
 
 interface DashboardProps {
@@ -16,7 +16,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const boards = useAppStore((s) => s.boards);
   const savedProjects = useAppStore((s) => s.savedProjects);
   const activeParts = useAppStore((s) => s.activeParts);
-  const storageLocations = useAppStore((s) => s.storageLocations);
+  const storageLocations = useAppStore((s) =>
+    s.storageLocations?.length ? s.storageLocations : DEFAULT_LOCATIONS
+  );
 
   const activeBoards = boards.filter((b) => b.status === 'active');
   const consumed = boards.filter((b) => b.status === 'consumed');
