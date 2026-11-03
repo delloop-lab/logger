@@ -4,9 +4,11 @@ import React, { useMemo, useState } from 'react';
 import { QrCode, Camera, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAppStore, Board } from '@/lib/store';
+import { formatDimsLWT } from '@/lib/units';
 
 export default function ScannerTab() {
   const boards = useAppStore((s) => s.boards);
+  const unitSystem = useAppStore((s) => s.unitSystem);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<Board | null>(null);
 
@@ -89,7 +91,7 @@ export default function ScannerTab() {
           <div className="text-emerald-400 font-bold text-sm">{found.tagId}</div>
           <div className="text-gray-300">{found.species} · {found.source}</div>
           <div className="text-gray-400">
-            {found.length} × {found.width} × {found.thickness} mm
+            {formatDimsLWT(found.length, found.width, found.thickness, unitSystem)}
           </div>
           <div className="text-gray-400">Location: {found.location}</div>
           <div className="text-gray-500">Status: {found.status}</div>

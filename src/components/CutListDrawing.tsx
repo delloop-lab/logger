@@ -5,6 +5,7 @@ import { useAppStore, Board, BoardClassification } from '@/lib/store';
 import { createCuttingPlan, type Placement } from '@/lib/cutting-engine';
 import { Printer, CheckCircle2, ShieldCheck, Scissors, Box, AlertTriangle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { displayToMm, formatDim, formatDimsLWT, mmToDisplay, unitLabel } from '@/lib/units';
 
 export default function CutListDrawing() {
   const store = useAppStore();
@@ -13,6 +14,8 @@ export default function CutListDrawing() {
   const activeParts = store?.activeParts || [];
   const completedOperations = store?.completedOperations || [];
   const offcutSettings = store?.offcutSettings || { minLength: 100, minWidth: 100 };
+  const unitSystem = store.unitSystem;
+  const u = unitLabel(unitSystem);
 
   const [confirmStep, setConfirmStep] = useState<Placement | null>(null);
   const [overrideClassification, setOverrideClassification] = useState<BoardClassification | null>(null);
@@ -52,8 +55,8 @@ export default function CutListDrawing() {
 
   const openConfirmationModal = (step: Placement) => {
     setConfirmStep(step);
-    setCustomRemLen(step.remLen);
-    setCustomRemWid(step.remWid);
+    setCustomRemLen(mmToDisplay(step.remLen, unitSystem, unitSystem === 'imperial' ? 2 : 1));
+    setCustomRemWid(mmToDisplay(step.remWid, unitSystem, unitSystem === 'imperial' ? 2 : 1));
     const isWaste =
       step.remLen < offcutSettings.minLength && step.remWid < offcutSettings.minWidth;
     setOverrideClassification(isWaste ? 'waste' : 'reusable_offcut');
@@ -101,8 +104,11 @@ export default function CutListDrawing() {
 
     const newRecords: Board[] = [finishedPartBoard];
 
+    const remLenMm = displayToMm(customRemLen, unitSystem);
+    const remWidMm = displayToMm(customRemWid, unitSystem);
+
     // Offcuts / waste only when the parent board is fully cut
-    if (isLastOnBoard && customRemLen > 0 && customRemWid > 0) {
+    if (isLastOnBoard && remLenMm > 0 && remWidMm > 0) {
       const isReusable = overrideClassification === 'reusable_offcut';
       newRecords.push({
         id: `off-${Date.now()}-${confirmStep.stepIndex}`,
@@ -110,12 +116,12 @@ export default function CutListDrawing() {
         species: confirmStep.species,
         source: confirmStep.source,
         dimensions: {
-          length: Number(customRemLen.toFixed(1)),
-          width: Number(customRemWid.toFixed(1)),
+          length: Number(remLenMm.toFixed(1)),
+          width: Number(remWidMm.toFixed(1)),
           thickness: confirmStep.thickness,
         },
-        length: Number(customRemLen.toFixed(1)),
-        width: Number(customRemWid.toFixed(1)),
+        length: Number(remLenMm.toFixed(1)),
+        width: Number(remWidMm.toFixed(1)),
         thickness: confirmStep.thickness,
         quantity: 1,
         location: confirmStep.location,
@@ -203,7 +209,7 @@ export default function CutListDrawing() {
                   </div>
                   {board && (
                     <div className="text-gray-300 text-[11px]">
-                      {board.species} ({board.length}×{board.width}×{board.thickness} mm) ·{' '}
+                      {board.species} ({formatDimsLWT(board.length, board.width, board.thickness, unitSystem)}) ·{' '}
                       {board.source}
                     </div>
                   )}
@@ -283,7 +289,7 @@ export default function CutListDrawing() {
                   <div>
                     Board Dimensions:{' '}
                     <strong className="text-zinc-900">
-                      {step.stockLen}mm L × {step.stockWid}mm W × {step.thickness}mm T
+                      {formatDimsLWT(step.stockLen, step.stockWid, step.thickness, unitSystem)}
                     </strong>
                   </div>
                 </div>
@@ -298,18 +304,18 @@ export default function CutListDrawing() {
                   <div>
                     Cut Size:{' '}
                     <strong className="text-zinc-900">
-                      {step.cutLen}mm × {step.cutWid}mm
+                      {formatDim(step.cutLen, unitSystem)} × {formatDim(step.cutWid, unitSystem)}
                       {step.rotated ? ' (rotated)' : ''}
                     </strong>
                   </div>
                   <div>
                     Position:{' '}
                     <strong className="text-zinc-900">
-                      X: {step.posX}mm, Y: {step.posY}mm
+                      X: {formatDim(step.posX, unitSystem)}, Y: {formatDim(step.posY, unitSystem)}
                     </strong>
                   </div>
                   <div>
-                    Saw Kerf: <strong className="text-zinc-900">{step.kerf}mm</strong>
+                    Saw Kerf: <strong className="text-zinc-900">{formatDim(step.kerf, unitSystem)}</strong>
                   </div>
                 </div>
               </div>
@@ -355,7 +361,7 @@ export default function CutListDrawing() {
                       textAnchor="middle"
                       fontWeight="bold"
                     >
-                      LENGTH: {step.stockLen} mm
+                      LENGTH: {formatDim(step.stockLen, unitSystem)}
                     </text>
                     <text
                       x="22"
@@ -365,7 +371,7 @@ export default function CutListDrawing() {
                       fontWeight="bold"
                       transform={`rotate(-90, 22, ${marginY + boardH / 2})`}
                     >
-                      WIDTH: {step.stockWid} mm
+                      WIDTH: {formatDim(step.stockWid, unitSystem)}
                     </text>
 
                     <rect
@@ -404,7 +410,7 @@ export default function CutListDrawing() {
                       {step.partName.toUpperCase()}
                     </text>
                     <text x={partX + 6} y={partY + 28} fill="#ea580c" fontSize="9" fontWeight="bold">
-                      {step.cutLen}mm × {step.cutWid}mm
+                      {formatDim(step.cutLen, unitSystem)} × {formatDim(step.cutWid, unitSystem)}
                     </text>
                   </svg>
                 </div>
@@ -413,10 +419,12 @@ export default function CutListDrawing() {
               <div className="border-t border-zinc-300 pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="text-xs font-mono text-zinc-700 space-y-0.5">
                   <div>
-                    • Position cut at X: {step.posX}mm, Y: {step.posY}mm on stock.
+                    • Position cut at X: {formatDim(step.posX, unitSystem)}, Y:{' '}
+                    {formatDim(step.posY, unitSystem)} on stock.
                   </div>
                   <div>
-                    • Yields: <strong>{step.partName}</strong> ({step.cutLen}mm × {step.cutWid}mm).
+                    • Yields: <strong>{step.partName}</strong> (
+                    {formatDim(step.cutLen, unitSystem)} × {formatDim(step.cutWid, unitSystem)}).
                   </div>
                 </div>
 
@@ -470,7 +478,7 @@ export default function CutListDrawing() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Saw Kerf:</span>
-                <strong className="text-red-400">{confirmStep.kerf} mm</strong>
+                <strong className="text-red-400">{formatDim(confirmStep.kerf, unitSystem)}</strong>
               </div>
             </div>
 
@@ -480,18 +488,20 @@ export default function CutListDrawing() {
               </p>
               <div className="grid grid-cols-2 gap-3 font-mono text-xs">
                 <div>
-                  <label className="block text-[11px] text-gray-400 mb-1">Rem Length (mm)</label>
+                  <label className="block text-[11px] text-gray-400 mb-1">Rem Length ({u})</label>
                   <input
                     type="number"
+                    step="any"
                     value={customRemLen}
                     onChange={(e) => setCustomRemLen(parseFloat(e.target.value) || 0)}
                     className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-gray-400 mb-1">Rem Width (mm)</label>
+                  <label className="block text-[11px] text-gray-400 mb-1">Rem Width ({u})</label>
                   <input
                     type="number"
+                    step="any"
                     value={customRemWid}
                     onChange={(e) => setCustomRemWid(parseFloat(e.target.value) || 0)}
                     className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-emerald-500"

@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { UnitSystem } from '@/lib/units';
 
 export type BoardStatus = 'active' | 'consumed' | 'allocated';
 export type BoardClassification = 'finished_piece' | 'reusable_offcut' | 'waste';
+export type { UnitSystem };
 
 export interface OffcutSettings {
   minLength: number;
@@ -87,12 +89,15 @@ interface AppState {
   activeParts: CutPart[];
   completedOperations: string[];
   offcutSettings: OffcutSettings;
+  /** Display/input units — inventory values always stored in millimetres */
+  unitSystem: UnitSystem;
 
   addBoard: (board: Board) => void;
   removeBoard: (id: string) => void;
   updateBoard: (board: Board) => void;
   updateStorageLocations: (locations: string[]) => void;
   updateOffcutSettings: (settings: OffcutSettings) => void;
+  setUnitSystem: (system: UnitSystem) => void;
   processCuttingOperation: (
     opKey: string,
     parentBoardTagId: string,
@@ -166,6 +171,7 @@ const FRESH_STATE = {
     minLength: 100,
     minWidth: 100,
   },
+  unitSystem: 'metric' as UnitSystem,
 };
 
 export const useAppStore = create<AppState>()(
@@ -185,6 +191,7 @@ export const useAppStore = create<AppState>()(
 
       updateStorageLocations: (locations) => set({ storageLocations: locations }),
       updateOffcutSettings: (settings) => set({ offcutSettings: settings }),
+      setUnitSystem: (system) => set({ unitSystem: system }),
 
       processCuttingOperation: (opKey, parentBoardTagId, newBoards, options) => {
         set((state) => {
@@ -266,7 +273,14 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'timbervault_v2',
-      version: 1,
+      version: 2,
+      migrate: (persistedState) => {
+        const state = (persistedState || {}) as Record<string, unknown>;
+        return {
+          ...state,
+          unitSystem: state.unitSystem === 'imperial' ? 'imperial' : 'metric',
+        };
+      },
     }
   )
 );

@@ -3,19 +3,17 @@
 import React from 'react';
 import { useAppStore, DEFAULT_LOCATIONS } from '@/lib/store';
 import { Layers, Package, Scissors, MapPin, PlusCircle } from 'lucide-react';
+import { formatDimsLWT, volumeBoardFeet, volumeM3 } from '@/lib/units';
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
-}
-
-function boardVolumeM3(b: { length: number; width: number; thickness: number; quantity: number }) {
-  return (b.length * b.width * b.thickness * (b.quantity || 1)) / 1_000_000_000;
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const boards = useAppStore((s) => s.boards);
   const savedProjects = useAppStore((s) => s.savedProjects);
   const activeParts = useAppStore((s) => s.activeParts);
+  const unitSystem = useAppStore((s) => s.unitSystem);
   const storageLocations = useAppStore((s) =>
     s.storageLocations?.length ? s.storageLocations : DEFAULT_LOCATIONS
   );
@@ -24,7 +22,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const consumed = boards.filter((b) => b.status === 'consumed');
   const offcuts = activeBoards.filter((b) => b.classification === 'reusable_offcut');
   const finished = boards.filter((b) => b.classification === 'finished_piece');
-  const totalVolume = activeBoards.reduce((sum, b) => sum + boardVolumeM3(b), 0);
+  const totalVolume =
+    unitSystem === 'imperial'
+      ? activeBoards.reduce(
+          (sum, b) => sum + volumeBoardFeet(b.length, b.width, b.thickness, b.quantity || 1),
+          0
+        )
+      : activeBoards.reduce(
+          (sum, b) => sum + volumeM3(b.length, b.width, b.thickness, b.quantity || 1),
+          0
+        );
 
   const speciesBreakdown = activeBoards.reduce<Record<string, number>>((acc, b) => {
     acc[b.species] = (acc[b.species] || 0) + 1;
@@ -44,7 +51,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     },
     {
       label: 'Active volume',
-      value: `${totalVolume.toFixed(3)} m³`,
+      value:
+        unitSystem === 'imperial'
+          ? `${totalVolume.toFixed(3)} bf`
+          : `${totalVolume.toFixed(3)} m³`,
       hint: 'Available stock only',
       tone: 'text-white',
     },
@@ -121,7 +131,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     <span className="text-gray-500 mx-2">·</span>
                     <span className="text-gray-300">{b.species}</span>
                     <div className="text-gray-500 mt-0.5">
-                      {b.length} × {b.width} × {b.thickness} mm · {b.location}
+                      {formatDimsLWT(b.length, b.width, b.thickness, unitSystem)} · {b.location}
                     </div>
                   </div>
                   <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-gray-700 px-2 py-0.5 rounded">

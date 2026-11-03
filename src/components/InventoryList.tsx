@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useAppStore, Board } from '@/lib/store';
 import { Package, Trash2, Edit3, MapPin, Tag, X, Check, ArrowUpDown } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { displayToMm, formatDimsLWT, mmToDisplay, unitLabel } from '@/lib/units';
 
 type SortField = 'tagId' | 'species' | 'source' | 'length' | 'width' | 'thickness' | 'location';
 type SortOrder = 'asc' | 'desc';
@@ -13,6 +14,8 @@ export default function InventoryList() {
   const boards = store?.boards || [];
   const removeBoard = store?.removeBoard || (() => {});
   const addBoard = store?.addBoard || (() => {});
+  const unitSystem = store.unitSystem;
+  const u = unitLabel(unitSystem);
 
   const activeLocations = (store?.storageLocations || [
     'Workbench',
@@ -171,7 +174,7 @@ export default function InventoryList() {
                   <td className="p-3 font-sans font-semibold text-white">{b.species}</td>
                   <td className="p-3 text-gray-400">{b.source}</td>
                   <td className="p-3 text-gray-200">
-                    {b.length} × {b.width} × {b.thickness} mm
+                    {formatDimsLWT(b.length, b.width, b.thickness, unitSystem)}
                   </td>
                   <td className="p-3 text-emerald-400">
                     <span className="inline-flex items-center gap-1 font-sans">
@@ -254,29 +257,47 @@ export default function InventoryList() {
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Length (mm)</label>
+                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Length ({u})</label>
                   <input
                     type="number"
-                    value={editingBoard.length}
-                    onChange={(e) => setEditingBoard({ ...editingBoard, length: parseFloat(e.target.value) || 0 })}
+                    step="any"
+                    value={mmToDisplay(editingBoard.length, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                    onChange={(e) =>
+                      setEditingBoard({
+                        ...editingBoard,
+                        length: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
+                      })
+                    }
                     className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Width (mm)</label>
+                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Width ({u})</label>
                   <input
                     type="number"
-                    value={editingBoard.width}
-                    onChange={(e) => setEditingBoard({ ...editingBoard, width: parseFloat(e.target.value) || 0 })}
+                    step="any"
+                    value={mmToDisplay(editingBoard.width, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                    onChange={(e) =>
+                      setEditingBoard({
+                        ...editingBoard,
+                        width: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
+                      })
+                    }
                     className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Thick (mm)</label>
+                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Thick ({u})</label>
                   <input
                     type="number"
-                    value={editingBoard.thickness}
-                    onChange={(e) => setEditingBoard({ ...editingBoard, thickness: parseFloat(e.target.value) || 0 })}
+                    step="any"
+                    value={mmToDisplay(editingBoard.thickness, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                    onChange={(e) =>
+                      setEditingBoard({
+                        ...editingBoard,
+                        thickness: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
+                      })
+                    }
                     className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
                   />
                 </div>

@@ -4,6 +4,7 @@ import React from 'react';
 import { useAppStore, PROJECT_TEMPLATES } from '@/lib/store';
 import { Sparkles, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { formatDimsLWT } from '@/lib/units';
 
 interface ProjectMatcherProps {
   onOpenCutList: () => void;
@@ -15,6 +16,7 @@ function normalizeSpecies(value: string) {
 
 export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
   const boards = useAppStore((s) => s.boards);
+  const unitSystem = useAppStore((s) => s.unitSystem);
   const setActiveProjectName = useAppStore((s) => s.setActiveProjectName);
   const setActiveParts = useAppStore((s) => s.setActiveParts);
 
@@ -112,7 +114,12 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
                 <p className="text-xs text-gray-400 leading-relaxed">{template.description}</p>
                 <p className="text-[11px] text-gray-500 font-mono">
                   Needs: {template.requiredSpecies.join(', ')} · min{' '}
-                  {template.minLength}×{template.minWidth}×{template.minThickness} mm
+                  {formatDimsLWT(
+                    template.minLength,
+                    template.minWidth,
+                    template.minThickness,
+                    unitSystem
+                  )}
                 </p>
                 <p className="text-[11px] text-gray-400">
                   Matching boards: <strong className="text-white">{matches.length}</strong>

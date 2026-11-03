@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAppStore, CutPart } from '@/lib/store';
+import { displayToMm, formatDim, unitLabel } from '@/lib/units';
 import {
   Scissors,
   Layers,
@@ -23,6 +24,8 @@ export default function CutListNesting() {
   const savedProjects = store?.savedProjects || [];
   const activeProjectName = store?.activeProjectName || 'New Project';
   const activeParts = store?.activeParts || [];
+  const unitSystem = store.unitSystem;
+  const u = unitLabel(unitSystem);
 
   const [partName, setPartName] = useState('');
   const [woodSpecies, setWoodSpecies] = useState('Pine / Pallet');
@@ -67,8 +70,8 @@ export default function CutListNesting() {
 
   const handleAddPart = (e: React.FormEvent) => {
     e.preventDefault();
-    const l = parseFloat(length);
-    const w = parseFloat(width);
+    const l = displayToMm(parseFloat(length), unitSystem);
+    const w = displayToMm(parseFloat(width), unitSystem);
     const qty = parseInt(quantity, 10);
 
     if (!partName.trim() || isNaN(l) || isNaN(w) || isNaN(qty) || l <= 0 || w <= 0 || qty <= 0) {
@@ -245,20 +248,22 @@ export default function CutListNesting() {
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Length (mm)</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Length ({u})</label>
                 <input
                   type="number"
-                  placeholder="e.g. 350"
+                  step="any"
+                  placeholder={unitSystem === 'imperial' ? 'e.g. 13.78' : 'e.g. 350'}
                   value={length}
                   onChange={(e) => setLength(e.target.value)}
                   className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Width (mm)</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Width ({u})</label>
                 <input
                   type="number"
-                  placeholder="e.g. 50"
+                  step="any"
+                  placeholder={unitSystem === 'imperial' ? 'e.g. 2' : 'e.g. 50'}
                   value={width}
                   onChange={(e) => setWidth(e.target.value)}
                   className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
@@ -315,7 +320,8 @@ export default function CutListNesting() {
                         <span className="text-[10px] bg-orange-950 text-orange-400 px-2 py-0.5 rounded border border-orange-800">{p.species}</span>
                       </div>
                       <div className="text-gray-400 text-xs">
-                        {p.length} × {p.width} mm — Qty: <strong className="text-white">{p.quantity}</strong>
+                        {formatDim(p.length, unitSystem)} × {formatDim(p.width, unitSystem)} — Qty:{' '}
+                        <strong className="text-white">{p.quantity}</strong>
                       </div>
                     </div>
                     <button
