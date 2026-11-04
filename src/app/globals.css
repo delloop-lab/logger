@@ -29,9 +29,172 @@ button {
   font: inherit;
 }
 
-/* Avoid white flash while CSS chunks hydrate */
-#__next,
-body > div {
+/* Avoid white flash while CSS chunks hydrate. */
+body > div:first-child {
   min-height: 100vh;
   background-color: #121417;
+}
+
+/* Cutting sheets PDF / print — hide app chrome, show instruction cards only */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+    min-height: 0 !important;
+  }
+
+  body > div:first-child {
+    min-height: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .no-print,
+  .print\:hidden,
+  [data-rht-toaster],
+  header,
+  nav {
+    display: none !important;
+  }
+
+  #timbervault-cut-sheets {
+    display: block !important;
+  }
+
+  #timbervault-cut-sheets .cut-sheet-page {
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+    border: 2px solid #111 !important;
+    border-radius: 0 !important;
+    margin: 0 0 8mm 0 !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  #timbervault-cut-sheets .cut-sheet-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  #timbervault-cut-sheets svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Single board QR label — system / browser print (A4) */
+  body:has(#timbervault-board-label) * {
+    visibility: hidden !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label,
+  body:has(#timbervault-board-label) #timbervault-board-label * {
+    visibility: visible !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label {
+    position: fixed !important;
+    left: 12mm !important;
+    top: 12mm !important;
+    width: 120mm !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+    border: 3px solid #000 !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    z-index: 99999 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: #000 !important;
+    color: #fff !important;
+    padding: 4mm 5mm !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-brand {
+    font-size: 16pt !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.08em !important;
+    color: #fff !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-subtitle {
+    font-size: 10pt !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.06em !important;
+    color: #fff !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-body {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 5mm !important;
+    padding: 5mm !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-qr {
+    flex-shrink: 0 !important;
+    width: 42mm !important;
+    height: 42mm !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-qr svg {
+    width: 42mm !important;
+    height: 42mm !important;
+    max-width: none !important;
+    display: block !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-meta {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    border-left: 2.5px solid #000 !important;
+    padding-left: 4.5mm !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 2.5mm !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-tag {
+    font-size: 22pt !important;
+    font-weight: 900 !important;
+    line-height: 1.05 !important;
+    letter-spacing: 0.02em !important;
+    border-bottom: 2.5px solid #000 !important;
+    padding-bottom: 1.5mm !important;
+    color: #000 !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-species {
+    font-size: 16pt !important;
+    font-weight: 900 !important;
+    line-height: 1.15 !important;
+    color: #000 !important;
+  }
+
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-dims,
+  body:has(#timbervault-board-label) #timbervault-board-label .board-label-loc {
+    font-size: 13pt !important;
+    font-weight: 900 !important;
+    line-height: 1.2 !important;
+    color: #000 !important;
+  }
 }

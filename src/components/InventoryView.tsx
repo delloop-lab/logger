@@ -3,11 +3,13 @@
 import React, { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { PlusCircle } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { toast } from '@/lib/notify';
+import { nextLotTagId, tagPrefixForSpecies } from '@/lib/tags';
 
 export default function InventoryView() {
   const store = useAppStore();
   const addBoard = store?.addBoard || (() => {});
+  const boards = store?.boards || [];
 
   // Active custom storage locations (filtering out blank slots)
   const activeLocations = (store?.storageLocations || [
@@ -41,7 +43,7 @@ export default function InventoryView() {
 
     const newBoard = {
       id: Date.now().toString(),
-      tagId: `PIN-${Math.floor(100 + Math.random() * 900)}`,
+      tagId: nextLotTagId(boards, tagPrefixForSpecies(species)),
       species,
       source,
       length: l,
@@ -74,6 +76,7 @@ export default function InventoryView() {
                 className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold"
               >
                 <option value="Pine/Pallet">Pine / Pallet</option>
+                <option value="Plywood">Plywood</option>
                 <option value="European Oak">European Oak</option>
                 <option value="Walnut">Walnut</option>
                 <option value="Maple">Maple</option>
@@ -88,6 +91,7 @@ export default function InventoryView() {
                 onChange={e => setSource(e.target.value)}
                 className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold"
               >
+                <option value="New">New</option>
                 <option value="Pallet">Pallet</option>
                 <option value="Cut-off">Cut-off</option>
                 <option value="Salvaged">Salvaged Timber</option>

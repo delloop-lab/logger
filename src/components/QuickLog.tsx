@@ -2,12 +2,19 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { PlusCircle } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { PlusCircle, AlertTriangle } from 'lucide-react';
+import { toast } from '@/lib/notify';
 import { displayToMm, mmToDisplay, unitLabel } from '@/lib/units';
+import { nextLotTagId, tagPrefixForSpecies } from '@/lib/tags';
+import { DEFECT_OPTIONS, type DefectType } from '@/lib/defects';
 
-export default function QuickLog() {
+type Props = {
+  onLogged?: () => void;
+};
+
+export default function QuickLog({ onLogged }: Props) {
   const addBoard = useAppStore((s) => s.addBoard);
+  const boards = useAppStore((s) => s.boards);
   const unitSystem = useAppStore((s) => s.unitSystem);
   const activeLocations = useAppStore((s) =>
     (s.storageLocations || []).filter((loc) => loc && loc.trim() !== '')
@@ -21,6 +28,12 @@ export default function QuickLog() {
   const [width, setWidth] = useState('');
   const [thickness, setThickness] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [defects, setDefects] = useState<DefectType[]>([]);
+  const [defectNotes, setDefectNotes] = useState('');
+
+  const toggleDefect = (d: DefectType) => {
+    setDefects((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  };
 
   useEffect(() => {
     // Sensible defaults in current unit system (450×75×18 mm)
@@ -42,14 +55,21 @@ export default function QuickLog() {
     const t = displayToMm(parseFloat(thickness), unitSystem);
     const qty = parseInt(quantity, 10);
 
-    if (isNaN(l) || isNaN(w) || isNaN(t) || isNaN(qty) || l <= 0 || w <= 0 || t <= 0) {
-      toast.error('Please enter valid dimensions.');
+    if (
+      isNaN(l) ||
+      isNaN(w) ||
+      isNaN(t) ||
+      isNaN(qty) ||
+      qty < 1 ||
+      l <= 0 ||
+      w <= 0 ||
+      t <= 0
+    ) {
+      toast.error('Please enter valid dimensions and a quantity of at least 1.');
       return;
     }
 
-    const tagPrefix = species.toLowerCase().includes('walnut') ? 'WAL' : 'PIN';
-    const randomId = Math.floor(100 + Math.random() * 900);
-    const tagId = `${tagPrefix}-${randomId}`;
+    const tagId = nextLotTagId(boards, tagPrefixForSpecies(species));
 
     addBoard({
       id: Date.now().toString(),
@@ -63,8 +83,18 @@ export default function QuickLog() {
       location,
       status: 'active',
       createdAt: new Date().toISOString(),
+      defects: defects.length ? [...defects] : undefined,
+      defectNotes: defectNotes.trim() || undefined,
     });
-    toast.success(`Logged board lot ${tagId} successfully!`);
+    setQuantity('1');
+    setDefects([]);
+    setDefectNotes('');
+    toast.success(
+      qty === 1
+        ? `Logged lot ${tagId} (1 board).`
+        : `Logged lot ${tagId} (${qty} boards in one lot).`
+    );
+    onLogged?.();
   };
 
   return (
@@ -89,6 +119,7 @@ export default function QuickLog() {
               className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
             >
               <option value="Pine / Pallet">Pine / Pallet</option>
+              <option value="Plywood">Plywood</option>
               <option value="Walnut">Walnut</option>
               <option value="European Oak">European Oak</option>
               <option value="Maple">Maple</option>
@@ -102,6 +133,7 @@ export default function QuickLog() {
               onChange={(e) => setSource(e.target.value)}
               className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
             >
+              <option value="New">New</option>
               <option value="Pallet">Pallet</option>
               <option value="Salvaged">Salvaged</option>
               <option value="Cut-off">Cut-off</option>
@@ -161,7 +193,9 @@ export default function QuickLog() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Quantity</label>
+          <label className="block text-xs font-medium text-gray-400 mb-1">
+            Quantity in this lot
+          </label>
           <input
             type="number"
             min="1"
@@ -169,6 +203,54 @@ export default function QuickLog() {
             onChange={(e) => setQuantity(e.target.value)}
             className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
           />
+          <p className="text-[10px] text-gray-500 mt-1">
+            Same size / species / location stay as one lot with this quantity, not separate rows.
+          </p>
+        </div>
+
+        <div className="space-y-2 rounded-xl border border-amber-800/40 bg-amber-950/20 p-3.5">
+          <label className="flex items-center gap-2 text-xs font-medium text-amber-300">
+            <AlertTriangle className="w-3.5 h-3.5" /> Defects on this stock
+          </label>
+          <p className="text-[10px] text-gray-500">
+            Tick anything to watch for when cutting or assembling. Shows on pull tags for every project
+            that uses this lot.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {DEFECT_OPTIONS.map((d) => {
+              const checked = defects.includes(d);
+              return (
+                <label
+                  key={d}
+                  className={`flex items-center gap-2 text-[11px] rounded-lg px-2.5 py-1.5 cursor-pointer border ${
+                    checked
+                      ? 'border-amber-600/60 bg-amber-950/40 text-amber-200'
+                      : 'border-gray-800 bg-[#121417] text-gray-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleDefect(d)}
+                    className="accent-amber-500 cursor-pointer"
+                  />
+                  {d}
+                </label>
+              );
+            })}
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-gray-400 mb-1">
+              Defect notes (optional)
+            </label>
+            <input
+              type="text"
+              value={defectNotes}
+              onChange={(e) => setDefectNotes(e.target.value)}
+              placeholder="e.g. screw holes near one end, avoid for face panels"
+              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white"
+            />
+          </div>
         </div>
 
         <button

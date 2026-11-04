@@ -38,4 +38,11 @@ Thumbs.db
 *.local.json
 backup/
 
+# local binaries
+bin/*.exe
+
+# scratch / local captures
+tmp-shot*.png
+supabase/.temp/
+
 .vercel

@@ -8,6 +8,10 @@ import StorageSettings from '@/components/StorageSettings';
 import Dashboard from '@/components/Dashboard';
 import ProjectMatcher from '@/components/ProjectMatcher';
 import ScannerTab from '@/app/scanner';
+import CloudSync from '@/components/CloudSync';
+import AuthModal from '@/components/AuthModal';
+import AppModal from '@/components/AppModal';
+import { useAppStore } from '@/lib/store';
 import {
   PlusCircle,
   List,
@@ -17,7 +21,11 @@ import {
   Layers,
   Sparkles,
   QrCode,
+  LogOut,
+  LogIn,
 } from 'lucide-react';
+import { toast } from '@/lib/notify';
+import { signOut } from '@/lib/supabase/auth';
 
 type TabType =
   | 'dashboard'
@@ -40,61 +48,181 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [authOpen, setAuthOpen] = useState(false);
+  const [loginGateOpen, setLoginGateOpen] = useState(false);
+  const cloudUserId = useAppStore((s) => s.cloudUserId);
+  const authChecked = useAppStore((s) => s.authChecked);
+  const cloudReady = useAppStore((s) => s.cloudReady);
+  const demoPreview = useAppStore((s) => s.demoPreview);
+  const signedIn = Boolean(cloudUserId);
+
+  const handleSignOut = async () => {
+    const result = await signOut();
+    if (result.ok) {
+      setActiveTab('dashboard');
+      setLoginGateOpen(false);
+      setAuthOpen(false);
+      toast.success('Signed out.');
+    } else {
+      toast.error(result.message);
+    }
+  };
+
+  const openLogin = () => {
+    setLoginGateOpen(false);
+    setAuthOpen(true);
+  };
+
+  /**
+   * Preview mode: full empty workshop UI (like a first-time account).
+   * Menus/tabs work; any real action (except Log in) asks to sign in.
+   */
+  const guardLoggedOutAction = (e: React.SyntheticEvent) => {
+    if (!authChecked || signedIn) return;
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest('[data-login-trigger]')) return;
+    if (target.closest('[data-login-gate]') || target.closest('[data-auth-modal]')) return;
+    if (target.closest('[data-allow-demo]')) return;
+    // Allow browsing header tabs / section nav only
+    if (target.closest('[data-nav-tab]')) return;
+
+    const interactive = target.closest(
+      'button, a, input, select, textarea, label, [role="button"], summary'
+    );
+    if (!interactive) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setLoginGateOpen(true);
+  };
+
+  // Signed-out: show empty workshop (fresh store). Signed-in: wait for cloud hydrate.
+  const showUi = authChecked && (!signedIn || cloudReady);
 
   return (
-    <div className="min-h-screen bg-[#121417] text-gray-100 p-4 md:p-8 font-sans">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <header className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl shadow-2xl space-y-5">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-black text-white tracking-wide flex items-center gap-2">
-                  <Wrench className="w-6 h-6 text-orange-500" /> TimberVault
-                </h1>
-                <span className="bg-orange-600/20 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded border border-orange-500/30 uppercase tracking-widest">
-                  Workshop
-                </span>
+    <>
+      <CloudSync />
+      <div
+        className="min-h-screen bg-[#121417] text-gray-100 p-4 md:p-8 font-sans"
+        onClickCapture={guardLoggedOutAction}
+        onSubmitCapture={guardLoggedOutAction}
+      >
+        <div className="max-w-6xl mx-auto space-y-6">
+          <header className="no-print bg-[#1e2228] border border-gray-800 p-6 rounded-2xl shadow-2xl space-y-5">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-2xl font-black text-white tracking-wide flex items-center gap-2">
+                    <Wrench className="w-6 h-6 text-orange-500" /> TimberVault
+                  </h1>
+                  <span className="bg-orange-600/20 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded border border-orange-500/30 uppercase tracking-widest">
+                    Workshop
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Catalogue timber, plan projects, and cut with less waste.
+                </p>
+                {demoPreview && !signedIn && (
+                  <p className="text-[11px] text-amber-300/90 mt-1">
+                    Demo preview — sample data only. Log in to load your workshop.
+                  </p>
+                )}
               </div>
-              <p className="text-xs text-gray-400">
-                Fresh inventory start — catalogue timber, plan projects, and cut with less waste.
-              </p>
+              {!authChecked ? (
+                <div className="h-9 w-24 rounded-xl bg-gray-800/60 animate-pulse" />
+              ) : signedIn ? (
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-xs font-bold rounded-xl cursor-pointer text-gray-300"
+                >
+                  <LogOut className="w-3.5 h-3.5" /> Sign out
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  data-login-trigger
+                  onClick={openLogin}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-orange-600 hover:bg-orange-500 text-xs font-bold rounded-xl cursor-pointer text-white shadow-lg shadow-orange-600/20"
+                >
+                  <LogIn className="w-3.5 h-3.5" /> Log in
+                </button>
+              )}
             </div>
-            <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 px-3 py-1.5 rounded-lg">
-              Local storage · ready for cloud sync
-            </span>
-          </div>
 
-          <nav className="flex items-center gap-1.5 bg-[#121417] p-1.5 rounded-xl border border-gray-800 flex-wrap">
-            {TABS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === id
-                    ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span className="whitespace-nowrap">{label}</span>
-              </button>
-            ))}
-          </nav>
-        </header>
+            <nav className="flex items-center gap-1.5 bg-[#121417] p-1.5 rounded-xl border border-gray-800 flex-wrap">
+              {TABS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  data-nav-tab
+                  onClick={() => setActiveTab(id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === id
+                      ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/30'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="whitespace-nowrap">{label}</span>
+                </button>
+              ))}
+            </nav>
+          </header>
 
-        <section className="space-y-6">
-          {activeTab === 'dashboard' && <Dashboard onNavigate={(tab) => setActiveTab(tab as TabType)} />}
-          {activeTab === 'quick-log' && <QuickLog />}
-          {activeTab === 'inventory' && <InventoryList />}
-          {activeTab === 'cut-list' && <CutListNesting />}
-          {activeTab === 'matcher' && (
-            <ProjectMatcher onOpenCutList={() => setActiveTab('cut-list')} />
-          )}
-          {activeTab === 'scanner' && <ScannerTab />}
-          {activeTab === 'storage' && <StorageSettings />}
-        </section>
+          <section className="space-y-6">
+            {!authChecked ? (
+              <div className="bg-[#1e2228] border border-gray-800 p-10 rounded-2xl text-center text-sm text-gray-500">
+                Checking session…
+              </div>
+            ) : signedIn && !cloudReady ? (
+              <div className="bg-[#1e2228] border border-gray-800 p-10 rounded-2xl text-center text-sm text-gray-500">
+                Loading workshop data…
+              </div>
+            ) : showUi ? (
+              <>
+                {activeTab === 'dashboard' && (
+                  <Dashboard onNavigate={(tab) => setActiveTab(tab as TabType)} />
+                )}
+                {activeTab === 'quick-log' && (
+                  <QuickLog onLogged={() => setActiveTab('inventory')} />
+                )}
+                {activeTab === 'inventory' && <InventoryList />}
+                {activeTab === 'cut-list' && <CutListNesting />}
+                {activeTab === 'matcher' && (
+                  <ProjectMatcher onOpenCutList={() => setActiveTab('cut-list')} />
+                )}
+                {activeTab === 'scanner' && <ScannerTab />}
+                {activeTab === 'storage' && <StorageSettings />}
+              </>
+            ) : null}
+          </section>
+        </div>
       </div>
-    </div>
+
+      <div data-login-gate>
+        <AppModal
+          open={loginGateOpen && !signedIn}
+          onClose={() => setLoginGateOpen(false)}
+          title="Log in required"
+          subtitle="You need to login to your workshop to see stock, projects, cutting drawings etc."
+          size="md"
+        >
+          <button
+            type="button"
+            data-login-trigger
+            onClick={openLogin}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-500 text-white text-sm font-bold rounded-xl cursor-pointer"
+          >
+            <LogIn className="w-4 h-4" /> Log in
+          </button>
+        </AppModal>
+      </div>
+
+      <div data-auth-modal>
+        <AuthModal open={authOpen && !signedIn} onClose={() => setAuthOpen(false)} />
+      </div>
+    </>
   );
 }

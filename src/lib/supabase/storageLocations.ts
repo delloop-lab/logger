@@ -107,3 +107,32 @@ export async function pushUnitPreference(
 
   return { ok: true, locations: [], message: 'Saved unit preference to Supabase.' };
 }
+
+export async function pullUnitPreference(
+  userId: string
+): Promise<
+  | { ok: true; unitSystem: 'metric' | 'imperial'; message: string }
+  | { ok: false; message: string }
+> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Supabase is not configured yet.' };
+  }
+
+  const { data, error } = await supabase
+    .from('user_preferences')
+    .select('unit_system')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  const system = data?.unit_system === 'imperial' ? 'imperial' : 'metric';
+  return {
+    ok: true,
+    unitSystem: system,
+    message: 'Loaded unit preference from Supabase.',
+  };
+}

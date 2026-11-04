@@ -1,19 +1,64 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAppStore, Board } from '@/lib/store';
-import { Package, Trash2, Edit3, MapPin, Tag, X, Check, ArrowUpDown } from 'lucide-react';
-import toast from 'react-hot-toast';
+import {
+  Package,
+  Trash2,
+  Edit3,
+  MapPin,
+  Tag,
+  Check,
+  ArrowUpDown,
+  CheckCircle2,
+  PackageCheck,
+  AlertTriangle,
+  Printer,
+} from 'lucide-react';
+import { toast } from '@/lib/notify';
 import { displayToMm, formatDimsLWT, mmToDisplay, unitLabel } from '@/lib/units';
+import { DEFECT_OPTIONS, formatDefectsList, type DefectType } from '@/lib/defects';
+import AppModal from '@/components/AppModal';
+import BoardLabelPrint from '@/components/BoardLabelPrint';
 
-type SortField = 'tagId' | 'species' | 'source' | 'length' | 'width' | 'thickness' | 'location';
+type SortField =
+  | 'tagId'
+  | 'species'
+  | 'source'
+  | 'length'
+  | 'width'
+  | 'thickness'
+  | 'location'
+  | 'classification'
+  | 'originProject';
 type SortOrder = 'asc' | 'desc';
+type TypeFilter = 'all' | 'project_offcuts' | 'finished' | 'stock';
+/** Available = not consumed (includes staged finished until installed). */
+type StatusFilter = 'available' | 'staged' | 'consumed' | 'all';
+
+const isFinishedPiece = (b: Board) =>
+  b.classification === 'finished_piece' || /-PART$/i.test(b.tagId || '');
+
+const isStagedFinished = (b: Board) => isFinishedPiece(b) && b.status !== 'consumed';
+
+/** Remnants / strips / set-asides, not finished parts */
+const isProjectOffcut = (b: Board) => {
+  if (isFinishedPiece(b)) return false;
+  return (
+    b.classification === 'reusable_offcut' ||
+    b.classification === 'waste' ||
+    /-(REM|EDGE|OFFCUT|WASTE|STRIP|ASIDE)$/i.test(b.tagId || '')
+  );
+};
 
 export default function InventoryList() {
   const store = useAppStore();
   const boards = store?.boards || [];
+  const savedProjects = store?.savedProjects || [];
   const removeBoard = store?.removeBoard || (() => {});
   const addBoard = store?.addBoard || (() => {});
+  const markBoardsInstalled = store?.markBoardsInstalled || (() => 0);
+  const markProjectCompleted = store?.markProjectCompleted;
   const unitSystem = store.unitSystem;
   const u = unitLabel(unitSystem);
 
@@ -26,25 +71,79 @@ export default function InventoryList() {
   ]).filter((loc) => loc && loc.trim() !== '');
 
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
+  const [labelBoard, setLabelBoard] = useState<Board | null>(null);
   const [sortField, setSortField] = useState<SortField>('tagId');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'consumed'>('active');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('available');
   const [speciesFilter, setSpeciesFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [projectFilter, setProjectFilter] = useState('all');
 
   const speciesOptions = Array.from(new Set(boards.map((b) => b.species).filter(Boolean))).sort();
+
+  const projectOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const p of savedProjects) {
+      if (p.name?.trim()) names.add(p.name.trim());
+    }
+    for (const b of boards) {
+      if (b.originProject?.trim()) names.add(b.originProject.trim());
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [boards, savedProjects]);
 
   const uniqueBoards = Array.from(
     new Map(boards.map((b) => [b.id || b.tagId, b])).values()
   ).filter((b) => {
-    if (statusFilter === 'active' && b.status === 'consumed') return false;
-    if (statusFilter === 'consumed' && b.status !== 'consumed') return false;
+    if (statusFilter === 'available') {
+      // Still on the shelf, including finished parts waiting to be installed
+      if (b.status === 'consumed') return false;
+    } else if (statusFilter === 'staged') {
+      if (!isStagedFinished(b)) return false;
+    } else if (statusFilter === 'consumed') {
+      if (b.status !== 'consumed') return false;
+    }
     if (speciesFilter !== 'all' && b.species !== speciesFilter) return false;
+    if (typeFilter === 'project_offcuts' && !isProjectOffcut(b)) return false;
+    if (typeFilter === 'finished' && !isFinishedPiece(b)) return false;
+    if (typeFilter === 'stock' && (isProjectOffcut(b) || isFinishedPiece(b))) return false;
+    if (projectFilter !== 'all' && (b.originProject || '') !== projectFilter) return false;
     return true;
   });
 
+  const stagedForProject =
+    projectFilter === 'all'
+      ? []
+      : boards.filter(
+          (b) => isStagedFinished(b) && (b.originProject || '') === projectFilter
+        );
+
+  const stagedCount = boards.filter(isStagedFinished).length;
+
   uniqueBoards.sort((a, b) => {
-    let valA = a[sortField];
-    let valB = b[sortField];
+    if (sortField === 'originProject' || sortField === 'classification') {
+      const offA = isProjectOffcut(a) ? 0 : isFinishedPiece(a) ? 1 : 2;
+      const offB = isProjectOffcut(b) ? 0 : isFinishedPiece(b) ? 1 : 2;
+      if (offA !== offB) {
+        return sortOrder === 'asc' ? offA - offB : offB - offA;
+      }
+      const projA = (a.originProject || '').toLowerCase();
+      const projB = (b.originProject || '').toLowerCase();
+      if (projA !== projB) {
+        const comp = projA.localeCompare(projB);
+        return sortOrder === 'asc' ? comp : -comp;
+      }
+      const classA = a.classification || '';
+      const classB = b.classification || '';
+      if (classA !== classB) {
+        const comp = classA.localeCompare(classB);
+        return sortOrder === 'asc' ? comp : -comp;
+      }
+      return (a.tagId || '').localeCompare(b.tagId || '');
+    }
+
+    const valA = a[sortField];
+    const valB = b[sortField];
 
     if (typeof valA === 'string' && typeof valB === 'string') {
       const comp = valA.localeCompare(valB);
@@ -61,6 +160,41 @@ export default function InventoryList() {
   const handleDelete = (id: string, tagId: string) => {
     removeBoard(id);
     toast.error(`Removed board ${tagId} from inventory.`);
+  };
+
+  /** Finished part leaves Available when installed into the completed project build. */
+  const markInstalled = (board: Board) => {
+    const n = markBoardsInstalled([board.id]);
+    if (n === 0) {
+      toast.error(`Could not install ${board.tagId}, try refreshing inventory.`);
+      return;
+    }
+    toast.success(
+      `${board.tagId} marked installed, removed from stock${
+        board.originProject ? ` (${board.originProject})` : ''
+      }.`
+    );
+  };
+
+  const markProjectBuildComplete = () => {
+    if (projectFilter === 'all' || stagedForProject.length === 0) {
+      toast.error('Select a project with staged finished parts first.');
+      return;
+    }
+    const n = markBoardsInstalled(stagedForProject.map((b) => b.id));
+    const showcase = markProjectCompleted?.(projectFilter);
+    if (showcase?.ok) {
+      toast.success(
+        `Build complete: ${n} finished part${n === 1 ? '' : 's'} installed. "${showcase.name}" is in What Can I Build, add a skill level and description there.`
+      );
+    } else {
+      toast.success(
+        `Build complete: ${n} finished part${n === 1 ? '' : 's'} installed for ${projectFilter}.${
+          showcase && !showcase.ok ? ` ${showcase.message}` : ''
+        }`
+      );
+    }
+    setStatusFilter('consumed');
   };
 
   const handleSaveEdit = (e: React.FormEvent) => {
@@ -90,19 +224,55 @@ export default function InventoryList() {
             <Package className="w-5 h-5 text-orange-500" /> Logged Inventory Boards
           </h3>
           <p className="text-xs text-gray-400 mt-0.5">
-            Manage your active stock, tag IDs, dimensions, and workshop locations.
+            Available includes stock, offcuts, and staged finished parts. Mark finished parts
+            installed when the project build is complete, then they leave Available. Create and
+            open projects in Projects & Cuts.
           </p>
         </div>
+      </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
           <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'active' | 'all' | 'consumed')}
+            value={typeFilter}
+            onChange={(e) => {
+              const next = e.target.value as TypeFilter;
+              setTypeFilter(next);
+              if (next === 'project_offcuts') {
+                setSortField('originProject');
+                setSortOrder('asc');
+              }
+              if (next === 'finished') {
+                setStatusFilter('staged');
+              }
+            }}
             className="bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-semibold cursor-pointer"
           >
-            <option value="active">Available</option>
-            <option value="consumed">Consumed</option>
+            <option value="all">All types</option>
+            <option value="project_offcuts">Offcuts from projects</option>
+            <option value="finished">Finished parts</option>
+            <option value="stock">Stock lots only</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-semibold cursor-pointer"
+          >
+            <option value="available">Available</option>
+            <option value="staged">Staged finished</option>
+            <option value="consumed">Consumed, installed</option>
             <option value="all">All statuses</option>
+          </select>
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className="bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-semibold cursor-pointer"
+          >
+            <option value="all">All projects</option>
+            {projectOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
           </select>
           <select
             value={speciesFilter}
@@ -124,6 +294,8 @@ export default function InventoryList() {
               onChange={(e) => setSortField(e.target.value as SortField)}
               className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer"
             >
+              <option value="originProject" className="bg-[#121417]">Project, offcut</option>
+              <option value="classification" className="bg-[#121417]">Type</option>
               <option value="tagId" className="bg-[#121417]">Tag ID</option>
               <option value="species" className="bg-[#121417]">Species</option>
               <option value="source" className="bg-[#121417]">Source</option>
@@ -142,9 +314,43 @@ export default function InventoryList() {
           </div>
 
           <span className="text-xs bg-gray-800 text-orange-400 font-mono px-3 py-2 rounded-xl border border-gray-700">
-            Showing: <strong className="text-white">{uniqueBoards.length}</strong>
+            Showing:{' '}
+            <strong className="text-white">{uniqueBoards.length}</strong> lot
+            {uniqueBoards.length === 1 ? '' : 's'}
+            {', '}
+            <strong className="text-emerald-400">
+              {uniqueBoards.filter(isFinishedPiece).length} finished
+            </strong>
+            {', '}
+            <strong className="text-amber-300">
+              {uniqueBoards.filter(isProjectOffcut).length} offcuts
+            </strong>
           </span>
-        </div>
+
+          {stagedCount > 0 && statusFilter === 'available' && (
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter('staged');
+                setTypeFilter('finished');
+              }}
+              className="inline-flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-700/50 text-emerald-300 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+            >
+              {stagedCount} staged, click to filter
+            </button>
+          )}
+
+          {projectFilter !== 'all' && stagedForProject.length > 0 && (
+            <button
+              type="button"
+              onClick={markProjectBuildComplete}
+              className="inline-flex items-center gap-1.5 bg-emerald-900/40 hover:bg-emerald-800/50 border border-emerald-700/60 text-emerald-300 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+              title={`Mark all staged finished parts for ${projectFilter} as installed`}
+            >
+              <PackageCheck className="w-3.5 h-3.5" />
+              Complete build, {projectFilter}, {stagedForProject.length}
+            </button>
+          )}
       </div>
 
       {uniqueBoards.length === 0 ? (
@@ -157,37 +363,90 @@ export default function InventoryList() {
             <thead className="bg-[#121417] text-gray-400 uppercase font-mono text-[10px] tracking-wider border-b border-gray-800">
               <tr>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('tagId')}>Tag ID</th>
+                <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('originProject')}>Project</th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('species')}>Species</th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('source')}>Source</th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('length')}>Dimensions (L × W × T)</th>
+                <th className="p-3">Qty</th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('location')}>Location</th>
-                <th className="p-3">Status</th>
+                <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('classification')}>Type, status</th>
+                <th className="p-3">Defects</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800 font-mono">
-              {uniqueBoards.map((b) => (
+              {uniqueBoards.map((b) => {
+                const defectLabel = formatDefectsList(b.defects, b.defectNotes);
+                return (
                 <tr key={b.id} className="hover:bg-[#121417]/50 transition-all">
                   <td className="p-3 font-bold text-orange-400 flex items-center gap-1.5 font-sans">
                     <Tag className="w-3.5 h-3.5 text-orange-500" /> {b.tagId}
+                  </td>
+                  <td className="p-3 text-amber-300/90 font-sans text-[11px]">
+                    {b.originProject || ''}
                   </td>
                   <td className="p-3 font-sans font-semibold text-white">{b.species}</td>
                   <td className="p-3 text-gray-400">{b.source}</td>
                   <td className="p-3 text-gray-200">
                     {formatDimsLWT(b.length, b.width, b.thickness, unitSystem)}
                   </td>
+                  <td className="p-3 text-white font-bold">{b.quantity || 1}</td>
                   <td className="p-3 text-emerald-400">
                     <span className="inline-flex items-center gap-1 font-sans">
                       <MapPin className="w-3.5 h-3.5" /> {b.location || 'Workbench'}
                     </span>
                   </td>
                   <td className="p-3">
-                    <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-gray-700 px-2 py-0.5 rounded">
-                      {b.status}
-                      {b.classification ? ` · ${b.classification}` : ''}
+                    <span
+                      className={`text-[10px] uppercase tracking-wide border px-2 py-0.5 rounded ${
+                        isFinishedPiece(b)
+                          ? b.status === 'consumed'
+                            ? 'text-slate-300 border-slate-600/60 bg-slate-900/40'
+                            : 'text-emerald-300 border-emerald-700/60 bg-emerald-950/30'
+                          : isProjectOffcut(b)
+                            ? 'text-amber-300 border-amber-700/60 bg-amber-950/30'
+                            : 'text-gray-400 border-gray-700'
+                      }`}
+                    >
+                      {isFinishedPiece(b)
+                        ? b.status === 'consumed'
+                          ? 'finished, installed'
+                          : 'finished, staged'
+                        : isProjectOffcut(b)
+                          ? 'project offcut'
+                          : b.classification || 'stock'}
+                      {!isFinishedPiece(b) && b.status === 'consumed' ? ', consumed' : ''}
                     </span>
                   </td>
+                  <td className="p-3 font-sans text-[11px] max-w-[14rem]">
+                    {defectLabel ? (
+                      <span className="inline-flex items-start gap-1 text-amber-300">
+                        <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                        <span>{defectLabel}</span>
+                      </span>
+                    ) : (
+                      <span className="text-gray-600">None</span>
+                    )}
+                  </td>
                   <td className="p-3 text-right space-x-1">
+                    {isStagedFinished(b) && (
+                      <button
+                        onClick={() => markInstalled(b)}
+                        className="text-emerald-400 hover:text-emerald-300 p-1.5 rounded-lg hover:bg-emerald-950/40 transition-all inline-block cursor-pointer"
+                        title="Mark installed in project build (removes from Available)"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      data-allow-demo
+                      onClick={() => setLabelBoard(b)}
+                      className="text-sky-400 hover:text-sky-300 p-1.5 rounded-lg hover:bg-sky-950/40 transition-all inline-block cursor-pointer"
+                      title="Print QR label"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => setEditingBoard({ ...b })}
                       className="text-orange-400 hover:text-orange-300 p-1.5 rounded-lg hover:bg-orange-950/40 transition-all inline-block cursor-pointer"
@@ -204,105 +463,184 @@ export default function InventoryList() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* Edit Board Modal */}
-      {editingBoard && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-              <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                <Edit3 className="w-4 h-4 text-orange-500" /> Edit Board ({editingBoard.tagId})
-              </h4>
-              <button onClick={() => setEditingBoard(null)} className="text-gray-400 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
+      <AppModal
+        open={Boolean(editingBoard)}
+        onClose={() => setEditingBoard(null)}
+        title={editingBoard ? `Edit board (${editingBoard.tagId})` : 'Edit board'}
+        subtitle="Update lot details in inventory"
+        size="md"
+      >
+        {editingBoard && (
+          <form onSubmit={handleSaveEdit} className="space-y-3">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-400 mb-1">Tag ID</label>
+              <input
+                type="text"
+                value={editingBoard.tagId}
+                onChange={(e) => setEditingBoard({ ...editingBoard, tagId: e.target.value })}
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
+              />
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Tag ID</label>
+                <label className="block text-[11px] font-medium text-gray-400 mb-1">Species</label>
                 <input
                   type="text"
-                  value={editingBoard.tagId}
-                  onChange={(e) => setEditingBoard({ ...editingBoard, tagId: e.target.value })}
+                  value={editingBoard.species}
+                  onChange={(e) => setEditingBoard({ ...editingBoard, species: e.target.value })}
                   className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Species</label>
-                  <input
-                    type="text"
-                    value={editingBoard.species}
-                    onChange={(e) => setEditingBoard({ ...editingBoard, species: e.target.value })}
-                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Source</label>
-                  <input
-                    type="text"
-                    value={editingBoard.source}
-                    onChange={(e) => setEditingBoard({ ...editingBoard, source: e.target.value })}
-                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
-                  />
-                </div>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-400 mb-1">Source</label>
+                <input
+                  type="text"
+                  value={editingBoard.source}
+                  onChange={(e) => setEditingBoard({ ...editingBoard, source: e.target.value })}
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
+                />
               </div>
+            </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Length ({u})</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={mmToDisplay(editingBoard.length, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
-                    onChange={(e) =>
-                      setEditingBoard({
-                        ...editingBoard,
-                        length: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
-                      })
-                    }
-                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Width ({u})</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={mmToDisplay(editingBoard.width, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
-                    onChange={(e) =>
-                      setEditingBoard({
-                        ...editingBoard,
-                        width: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
-                      })
-                    }
-                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Thick ({u})</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={mmToDisplay(editingBoard.thickness, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
-                    onChange={(e) =>
-                      setEditingBoard({
-                        ...editingBoard,
-                        thickness: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
-                      })
-                    }
-                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                  />
-                </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[11px] font-medium text-gray-400 mb-1">Length ({u})</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={mmToDisplay(editingBoard.length, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                  onChange={(e) =>
+                    setEditingBoard({
+                      ...editingBoard,
+                      length: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
+                    })
+                  }
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                />
               </div>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-400 mb-1">Width ({u})</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={mmToDisplay(editingBoard.width, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                  onChange={(e) =>
+                    setEditingBoard({
+                      ...editingBoard,
+                      width: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
+                    })
+                  }
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-400 mb-1">Thick ({u})</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={mmToDisplay(editingBoard.thickness, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                  onChange={(e) =>
+                    setEditingBoard({
+                      ...editingBoard,
+                      thickness: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
+                    })
+                  }
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                />
+              </div>
+            </div>
 
+            <div>
+              <label className="block text-[11px] font-medium text-gray-400 mb-1">
+                Project
+              </label>
+              <input
+                type="text"
+                value={editingBoard.originProject || ''}
+                onChange={(e) =>
+                  setEditingBoard({ ...editingBoard, originProject: e.target.value || undefined })
+                }
+                placeholder="e.g. Box, Cutting Board"
+                list="inventory-project-names"
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
+              />
+              <datalist id="inventory-project-names">
+                {projectOptions.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-amber-800/40 bg-amber-950/20 p-3">
+              <label className="flex items-center gap-1.5 text-[11px] font-medium text-amber-300">
+                <AlertTriangle className="w-3.5 h-3.5" /> Defects
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                {DEFECT_OPTIONS.map((d) => {
+                  const checked = (editingBoard.defects || []).includes(d);
+                  return (
+                    <label
+                      key={d}
+                      className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const cur = (editingBoard.defects || []) as DefectType[];
+                          const next = checked
+                            ? cur.filter((x) => x !== d)
+                            : [...cur, d];
+                          setEditingBoard({
+                            ...editingBoard,
+                            defects: next.length ? next : undefined,
+                          });
+                        }}
+                        className="accent-amber-500 cursor-pointer"
+                      />
+                      {d}
+                    </label>
+                  );
+                })}
+              </div>
+              <input
+                type="text"
+                value={editingBoard.defectNotes || ''}
+                onChange={(e) =>
+                  setEditingBoard({
+                    ...editingBoard,
+                    defectNotes: e.target.value || undefined,
+                  })
+                }
+                placeholder="Notes, e.g. screw holes near one end"
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-medium text-gray-400 mb-1">Qty in lot</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editingBoard.quantity || 1}
+                  onChange={(e) =>
+                    setEditingBoard({
+                      ...editingBoard,
+                      quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
+                    })
+                  }
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                />
+              </div>
               <div>
                 <label className="block text-[11px] font-medium text-gray-400 mb-1">Storage Location</label>
                 <select
@@ -317,26 +655,32 @@ export default function InventoryList() {
                   ))}
                 </select>
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingBoard(null)}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-orange-600/30 cursor-pointer"
-                >
-                  <Check className="w-4 h-4" /> Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="flex justify-end gap-2 pt-3">
+              <button
+                type="button"
+                onClick={() => setEditingBoard(null)}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-orange-600/30 cursor-pointer"
+              >
+                <Check className="w-4 h-4" /> Save Changes
+              </button>
+            </div>
+          </form>
+        )}
+      </AppModal>
+
+      <BoardLabelPrint
+        board={labelBoard}
+        unitSystem={unitSystem}
+        onClose={() => setLabelBoard(null)}
+      />
     </div>
   );
 }

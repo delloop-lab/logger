@@ -3,7 +3,7 @@
 import React from 'react';
 import { useAppStore, DEFAULT_LOCATIONS } from '@/lib/store';
 import { Layers, Package, Scissors, MapPin, PlusCircle } from 'lucide-react';
-import { formatDimsLWT, volumeBoardFeet, volumeM3 } from '@/lib/units';
+import { areaM2, areaSqFt, formatDimsLWT } from '@/lib/units';
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
@@ -18,23 +18,31 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     s.storageLocations?.length ? s.storageLocations : DEFAULT_LOCATIONS
   );
 
-  const activeBoards = boards.filter((b) => b.status === 'active');
+  const isFinished = (b: (typeof boards)[number]) =>
+    b.classification === 'finished_piece' || /-PART$/i.test(b.tagId || '');
+  /** Pullable stock + offcuts (finished parts are staged, not available). */
+  const availableBoards = boards.filter((b) => b.status === 'active' && !isFinished(b));
   const consumed = boards.filter((b) => b.status === 'consumed');
-  const offcuts = activeBoards.filter((b) => b.classification === 'reusable_offcut');
-  const finished = boards.filter((b) => b.classification === 'finished_piece');
-  const totalVolume =
+  const offcuts = availableBoards.filter((b) => b.classification === 'reusable_offcut');
+  const stagedFinished = boards.filter((b) => isFinished(b) && b.status !== 'consumed');
+  const installedFinished = boards.filter((b) => isFinished(b) && b.status === 'consumed');
+  const pieceCount = (list: typeof boards) =>
+    list.reduce((sum, b) => sum + (b.quantity || 1), 0);
+  const availablePieces = pieceCount(availableBoards);
+  const offcutPieces = pieceCount(offcuts);
+  const totalArea =
     unitSystem === 'imperial'
-      ? activeBoards.reduce(
-          (sum, b) => sum + volumeBoardFeet(b.length, b.width, b.thickness, b.quantity || 1),
+      ? availableBoards.reduce(
+          (sum, b) => sum + areaSqFt(b.length, b.width, b.quantity || 1),
           0
         )
-      : activeBoards.reduce(
-          (sum, b) => sum + volumeM3(b.length, b.width, b.thickness, b.quantity || 1),
+      : availableBoards.reduce(
+          (sum, b) => sum + areaM2(b.length, b.width, b.quantity || 1),
           0
         );
 
-  const speciesBreakdown = activeBoards.reduce<Record<string, number>>((acc, b) => {
-    acc[b.species] = (acc[b.species] || 0) + 1;
+  const speciesBreakdown = availableBoards.reduce<Record<string, number>>((acc, b) => {
+    acc[b.species] = (acc[b.species] || 0) + (b.quantity || 1);
     return acc;
   }, {});
 
@@ -45,17 +53,17 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const stats = [
     {
       label: 'Available boards',
-      value: String(activeBoards.length),
-      hint: `${offcuts.length} reusable offcuts`,
+      value: String(availablePieces),
+      hint: `${availableBoards.length} lot${availableBoards.length === 1 ? '' : 's'}, ${offcutPieces} reusable offcuts`,
       tone: 'text-white',
     },
     {
-      label: 'Active volume',
+      label: 'Active area',
       value:
         unitSystem === 'imperial'
-          ? `${totalVolume.toFixed(3)} bf`
-          : `${totalVolume.toFixed(3)} m³`,
-      hint: 'Available stock only',
+          ? `${totalArea.toFixed(3)} ft²`
+          : `${totalArea.toFixed(3)} m²`,
+      hint: 'Face area (L × W), available stock',
       tone: 'text-white',
     },
     {
@@ -65,9 +73,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       tone: 'text-white',
     },
     {
-      label: 'Used / finished',
-      value: String(consumed.length + finished.length),
-      hint: `${finished.length} finished pieces logged`,
+      label: 'Staged, installed',
+      value: `${pieceCount(stagedFinished)} / ${pieceCount(installedFinished)}`,
+      hint: `${pieceCount(consumed)} consumed lots, finished leave stock when installed`,
       tone: 'text-orange-400',
     },
   ];
@@ -79,7 +87,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <Layers className="w-5 h-5 text-orange-500" /> Workshop Dashboard
         </h2>
         <p className="text-xs text-gray-400">
-          Live view of your timber stock. Start empty — log boards in Quick Log to build inventory.
+          Live view of your timber stock. Start empty, log boards in Quick Log to build inventory.
         </p>
       </div>
 
@@ -101,6 +109,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </h3>
             <button
               type="button"
+              data-nav-tab
               onClick={() => onNavigate('quick-log')}
               className="text-xs font-bold text-orange-400 hover:text-orange-300 flex items-center gap-1 cursor-pointer"
             >
@@ -128,10 +137,11 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 >
                   <div>
                     <span className="text-orange-400 font-bold">{b.tagId}</span>
-                    <span className="text-gray-500 mx-2">·</span>
+                    <span className="text-gray-500 mx-2">,</span>
                     <span className="text-gray-300">{b.species}</span>
                     <div className="text-gray-500 mt-0.5">
-                      {formatDimsLWT(b.length, b.width, b.thickness, unitSystem)} · {b.location}
+                      {formatDimsLWT(b.length, b.width, b.thickness, unitSystem)}, {b.location}
+                      {(b.quantity || 1) > 1 ? `, qty ${b.quantity}` : ''}
                     </div>
                   </div>
                   <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-gray-700 px-2 py-0.5 rounded">
@@ -167,6 +177,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             <p className="text-xs text-gray-400 font-mono">{storageLocations.length} locations configured</p>
             <button
               type="button"
+              data-nav-tab
               onClick={() => onNavigate('storage')}
               className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl text-xs font-bold cursor-pointer"
             >
@@ -174,6 +185,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </button>
             <button
               type="button"
+              data-nav-tab
               onClick={() => onNavigate('cut-list')}
               className="w-full py-2.5 bg-orange-600/20 hover:bg-orange-600 text-orange-400 hover:text-white border border-orange-500/30 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center gap-2"
             >

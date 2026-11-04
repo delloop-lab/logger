@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterShellExecution": [
+      {
+        "command": "node .cursor/hooks/bump-version-after-push.mjs",
+        "matcher": "git(\\s|\\.exe\\s).*push|git\\s+push",
+        "timeout": 30
+      }
+    ]
+  }
+}

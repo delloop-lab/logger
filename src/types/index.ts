@@ -1,5 +1,7 @@
-export type WoodSource = 'Pallet' | 'Cut-off' | 'Furniture Teardown' | 'Salvage';
-export type DefectType = 'Screw holes' | 'Nail holes' | 'Loose knots' | 'Hairline checks' | 'Discoloration' | 'Waney edges' | 'Live edge';
+export type WoodSource = 'New' | 'Pallet' | 'Cut-off' | 'Furniture Teardown' | 'Salvage' | 'Salvaged' | 'Offcut Bin' | 'Purchased';
+import type { DefectType } from '@/lib/defects';
+export type { DefectType };
+export { DEFECT_OPTIONS } from '@/lib/defects';
 
 export interface Dimensions {
   length: number;

@@ -1,15 +1,23 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import {
+  DEFAULT_KERF_MM,
+  type CuttingStrategy,
+  type Placement,
+} from '@/lib/cutting-engine';
+import { createDemoWorkspace } from '@/lib/demo-workspace';
+import { escapeTag, resolveUnitsIssued } from '@/lib/inventory-lots';
 import type { UnitSystem } from '@/lib/units';
 
 export type BoardStatus = 'active' | 'consumed' | 'allocated';
 export type BoardClassification = 'finished_piece' | 'reusable_offcut' | 'waste';
-export type { UnitSystem };
+export type { UnitSystem, CuttingStrategy };
 
 export interface OffcutSettings {
   minLength: number;
   minWidth: number;
 }
+
+export { DEFAULT_KERF_MM };
 
 export interface Board {
   id: string;
@@ -19,7 +27,6 @@ export interface Board {
   length: number;
   width: number;
   thickness: number;
-  /** Optional nested dimensions used by some cut-confirmation writers */
   dimensions?: {
     length: number;
     width: number;
@@ -33,6 +40,15 @@ export interface Board {
   parentBoardId?: string;
   originProject?: string;
   notes?: string;
+  /** Defects noted when logging stock (screw holes, knots, etc.). */
+  defects?: string[];
+  /** Freeform detail for defects (where on the board, how bad, etc.). */
+  defectNotes?: string;
+  /**
+   * How many unit pieces have already been taken from this quantity lot.
+   * Keeps pull tags stable: after PIN-001-1 is used, next is PIN-001-2 (not PIN-001-1 again).
+   */
+  unitsIssued?: number;
 }
 
 export interface CutPart {
@@ -45,11 +61,58 @@ export interface CutPart {
   quantity: number;
 }
 
+export type ProjectStatus = 'active' | 'paused' | 'completed';
+export type ProjectDifficulty = 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
+
+/** Snapshot of the nesting plan used for confirmed shop cuts. */
+export interface SavedCuttingPlan {
+  savedAt: string;
+  /** Fingerprint of parts when this plan was built (invalidate if parts change). */
+  partsFingerprint: string;
+  kerfMm: number;
+  strategy?: CuttingStrategy;
+  explanation?: string;
+  usedBoardTags: string[];
+  placements: Placement[];
+  unallocated?: Array<{
+    id: string;
+    name: string;
+    species: string;
+    length: number;
+    width: number;
+    thickness: number;
+  }>;
+}
+
 export interface SavedProject {
   id: string;
   name: string;
   date: string;
   parts: CutPart[];
+  /** Blade kerf for this project (mm). Falls back to workshop default when missing. */
+  kerfMm?: number;
+  /** Paused = waiting for stock; completed = build finished (shown in What Can I Build). */
+  status?: ProjectStatus;
+  /** Why the project was paused (missing stock notes). */
+  pauseReason?: string;
+  /** Showcase blurb for What Can I Build (completed builds). */
+  description?: string;
+  /** Skill level shown on What Can I Build cards. */
+  difficulty?: ProjectDifficulty;
+  /** Last generated/confirmed cutting sequence for this project. */
+  cuttingPlan?: SavedCuttingPlan;
+  /** Confirmed cut op keys for this project (`Name-step-boardTag`). */
+  completedCutOps?: string[];
+}
+
+export function partsFingerprint(parts: CutPart[]): string {
+  return [...parts]
+    .map(
+      (p) =>
+        `${p.id}:${p.name}:${p.species}:${p.length}x${p.width}x${p.thickness ?? 0}:q${p.quantity}`
+    )
+    .sort()
+    .join('|');
 }
 
 export interface ProjectTemplate {
@@ -60,7 +123,7 @@ export interface ProjectTemplate {
   minLength: number;
   minWidth: number;
   minThickness: number;
-  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  difficulty: ProjectDifficulty;
 }
 
 export interface ConfirmationPayload {
@@ -81,7 +144,7 @@ export interface ConfirmationPayload {
   thickness: number;
 }
 
-interface AppState {
+export type WorkspaceData = {
   boards: Board[];
   storageLocations: string[];
   savedProjects: SavedProject[];
@@ -89,8 +152,55 @@ interface AppState {
   activeParts: CutPart[];
   completedOperations: string[];
   offcutSettings: OffcutSettings;
-  /** Display/input units — inventory values always stored in millimetres */
   unitSystem: UnitSystem;
+  /** Workshop default saw kerf (mm) — used for new projects */
+  defaultKerfMm: number;
+  /** Kerf for the project currently open (mm) — change anytime for a different blade */
+  activeKerfMm: number;
+  /** Preferred cutting strategy (§4) — defaults to 'auto' (Let Timber Vault Decide) */
+  activeStrategy?: CuttingStrategy;
+  /** Working copy of the open project's saved cutting plan (if any). */
+  activeCuttingPlan: SavedCuttingPlan | null;
+};
+
+export type CutHistoryEntry = {
+  opKey: string;
+  /** Boards whose status/qty were changed (lot or previous rem) */
+  restorations: Array<{
+    boardId: string;
+    boardTag: string;
+    prevStatus: BoardStatus;
+    prevQuantity: number;
+    prevUnitsIssued?: number;
+  }>;
+  createdBoardIds: string[];
+};
+
+interface AppState extends WorkspaceData {
+  cloudUserId: string | null;
+  cloudReady: boolean;
+  cloudSaving: boolean;
+  authChecked: boolean;
+  /** Signed-out preview uses sample data — never sync to cloud. */
+  demoPreview: boolean;
+  cutHistory: CutHistoryEntry[];
+  /** Bumped on every workshop mutation so CloudSync can persist to Supabase */
+  cloudRevision: number;
+  /**
+   * UI signal: Projects & Cuts should expand saved cutting diagrams
+   * (e.g. opened a confirmed build from What Can I Build).
+   */
+  revealSavedCuttingSheets: boolean;
+
+  setCloudUserId: (userId: string | null) => void;
+  setCloudReady: (ready: boolean) => void;
+  setCloudSaving: (saving: boolean) => void;
+  setAuthChecked: (checked: boolean) => void;
+  hydrateFromCloud: (data: WorkspaceData) => void;
+  clearWorkshopMemory: () => void;
+  /** Load sample workshop for signed-out UI (not real account data). */
+  loadDemoPreview: () => void;
+  bumpCloudRevision: () => void;
 
   addBoard: (board: Board) => void;
   removeBoard: (id: string) => void;
@@ -98,25 +208,77 @@ interface AppState {
   updateStorageLocations: (locations: string[]) => void;
   updateOffcutSettings: (settings: OffcutSettings) => void;
   setUnitSystem: (system: UnitSystem) => void;
+  setDefaultKerfMm: (mm: number) => void;
+  setActiveKerfMm: (mm: number) => void;
+  setActiveStrategy: (strategy: CuttingStrategy) => void;
   processCuttingOperation: (
     opKey: string,
-    parentBoardTagId: string,
     newBoards: Board[],
-    options?: { consumeParent?: boolean }
+    options?: {
+      /** Decrement/consume this inventory lot (first cut on a stock board) */
+      takeFromLotTag?: string;
+      /** Exact tags to mark consumed (e.g. previous remnant) */
+      consumeExactTags?: string[];
+    }
   ) => void;
+  undoLastCut: () => { ok: true; message: string } | { ok: false; message: string };
+  /** Undo every confirmed cut (newest first) — restores stock and removes parts/offcuts from cuts */
+  undoAllCuts: () => { ok: true; message: string } | { ok: false; message: string };
 
   setActiveProjectName: (name: string) => void;
   setActiveParts: (parts: CutPart[]) => void;
   addPartToActiveProject: (part: CutPart) => void;
+  updatePartInActiveProject: (part: CutPart) => void;
   removePartFromActiveProject: (id: string) => void;
+  /** Persist the current nest as this project's cutting plan (generate / confirm). */
+  saveCuttingPlanToActiveProject: (plan: SavedCuttingPlan) => void;
+  /** Clear saved plan (e.g. after parts edit or explicit regenerate). */
+  clearActiveCuttingPlan: () => void;
   saveCurrentProject: () => void;
-  loadProject: (id: string) => void;
+  /** Create or select a named project (empty cut list if new). */
+  createOrOpenProject: (name: string) => { ok: true; created: boolean } | { ok: false; message: string };
+  /**
+   * Save the open project as paused (waiting for stock), then clear the workbench.
+   * Returns false if the project has no name/parts.
+   */
+  pauseActiveProject: (
+    reason: string
+  ) => { ok: true; name: string } | { ok: false; message: string };
+  /** Resume a paused project onto the workbench and clear pause status. */
+  resumeProject: (id: string) => { ok: true; name: string } | { ok: false; message: string };
+  /** Mark finished parts installed (status consumed) in one update. */
+  markBoardsInstalled: (boardIds: string[]) => number;
+  /**
+   * Mark a saved project as a completed build (appears in What Can I Build).
+   * Matches by project name (e.g. Inventory “Build complete”).
+   */
+  markProjectCompleted: (
+    projectName: string,
+    meta?: { description?: string; difficulty?: ProjectDifficulty }
+  ) => { ok: true; id: string; name: string } | { ok: false; message: string };
+  /** Update showcase fields for a completed (or any) saved project. */
+  updateProjectShowcase: (
+    id: string,
+    meta: { description?: string; difficulty?: ProjectDifficulty }
+  ) => { ok: true } | { ok: false; message: string };
+  /**
+   * Push the open cut list into savedProjects so What Can I Build lists it
+   * (covers projects that were edited but never explicitly Saved).
+   */
+  syncActiveProjectToLibrary: () => void;
+  loadProject: (id: string, options?: { revealSheets?: boolean }) => void;
+  /** Open a library project and show its saved cutting diagrams when present. */
+  openProjectWithCuttingSheets: (id: string) => {
+    ok: true;
+    name: string;
+    hasPlan: boolean;
+  } | { ok: false; message: string };
+  clearRevealSavedCuttingSheets: () => void;
   deleteProject: (id: string) => void;
   startNewProject: () => void;
   resetWorkshopData: () => void;
 }
 
-/** Fresh workshop defaults — no demo boards, no Jewel Case, no sample projects */
 export const DEFAULT_LOCATIONS = [
   'Workbench',
   'Rack 1',
@@ -151,136 +313,852 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
   {
     id: 'tpl-mallet',
     name: 'Shop Mallet',
-    description: 'Heavy-duty workshop mallet laminated from offcuts.',
+    description:
+      'Heavy-duty workshop mallet laminated from offcuts (glue layers if boards are thinner).',
     requiredSpecies: ['European Oak', 'Pine / Pallet', 'Maple'],
     minLength: 200,
     minWidth: 60,
-    minThickness: 40,
+    // Laminated head — individual boards can be typical pallet/offcut thickness
+    minThickness: 18,
     difficulty: 'Beginner',
   },
 ];
 
-const FRESH_STATE = {
-  boards: [] as Board[],
+const FRESH_STATE: WorkspaceData = {
+  boards: [],
   storageLocations: [...DEFAULT_LOCATIONS],
   activeProjectName: 'New Project',
-  activeParts: [] as CutPart[],
-  savedProjects: [] as SavedProject[],
-  completedOperations: [] as string[],
+  activeParts: [],
+  savedProjects: [],
+  completedOperations: [],
   offcutSettings: {
     minLength: 100,
     minWidth: 100,
   },
-  unitSystem: 'metric' as UnitSystem,
+  unitSystem: 'metric',
+  defaultKerfMm: DEFAULT_KERF_MM,
+  activeKerfMm: DEFAULT_KERF_MM,
+  activeStrategy: 'auto',
+  activeCuttingPlan: null,
 };
 
-export const useAppStore = create<AppState>()(
-  persist(
-    (set, get) => ({
-      ...FRESH_STATE,
+function projectNameKey(name: string) {
+  return name.trim().toLowerCase();
+}
 
-      addBoard: (board) => set((state) => ({ boards: [board, ...state.boards] })),
+function patchSavedProject(
+  projects: SavedProject[],
+  name: string,
+  patch: Partial<SavedProject>
+): SavedProject[] {
+  const key = projectNameKey(name);
+  const idx = projects.findIndex((p) => projectNameKey(p.name) === key);
+  if (idx < 0) return projects;
+  return projects.map((p, i) => (i === idx ? { ...p, ...patch } : p));
+}
 
-      removeBoard: (id) =>
-        set((state) => ({ boards: state.boards.filter((b) => b.id !== id) })),
+function preservedProjectStatus(existing?: SavedProject): ProjectStatus {
+  if (existing?.status === 'paused') return 'paused';
+  if (existing?.status === 'completed') return 'completed';
+  return 'active';
+}
 
-      updateBoard: (board) =>
-        set((state) => ({
-          boards: state.boards.map((b) => (b.id === board.id ? board : b)),
-        })),
-
-      updateStorageLocations: (locations) => set({ storageLocations: locations }),
-      updateOffcutSettings: (settings) => set({ offcutSettings: settings }),
-      setUnitSystem: (system) => set({ unitSystem: system }),
-
-      processCuttingOperation: (opKey, parentBoardTagId, newBoards, options) => {
-        set((state) => {
-          if (state.completedOperations.includes(opKey)) return state;
-          const consumeParent = options?.consumeParent ?? true;
-
-          const updatedBoards = state.boards.map((b) => {
-            if (
-              consumeParent &&
-              (b.tagId === parentBoardTagId || b.id === parentBoardTagId)
-            ) {
-              return { ...b, status: 'consumed' as const };
-            }
-            return b;
-          });
-
-          return {
-            boards: [...newBoards, ...updatedBoards],
-            completedOperations: [...state.completedOperations, opKey],
-          };
-        });
-      },
-
-      setActiveProjectName: (name) => set({ activeProjectName: name }),
-      setActiveParts: (parts) => set({ activeParts: parts }),
-
-      addPartToActiveProject: (part) =>
-        set((state) => ({ activeParts: [...state.activeParts, part] })),
-
-      removePartFromActiveProject: (id) =>
-        set((state) => ({ activeParts: state.activeParts.filter((p) => p.id !== id) })),
-
-      saveCurrentProject: () => {
-        const { activeProjectName, activeParts, savedProjects } = get();
-        if (!activeProjectName.trim() || activeParts.length === 0) return;
-
-        const existingIdx = savedProjects.findIndex(
-          (p) => p.name.toLowerCase() === activeProjectName.trim().toLowerCase()
-        );
-
-        const projectData: SavedProject = {
-          id: existingIdx >= 0 ? savedProjects[existingIdx].id : Date.now().toString(),
-          name: activeProjectName.trim(),
-          date: new Date().toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          }),
-          parts: activeParts,
-        };
-
-        if (existingIdx >= 0) {
-          const updated = [...savedProjects];
-          updated[existingIdx] = projectData;
-          set({ savedProjects: updated });
-        } else {
-          set({ savedProjects: [projectData, ...savedProjects] });
-        }
-      },
-
-      loadProject: (id) => {
-        const proj = get().savedProjects.find((p) => p.id === id);
-        if (proj) {
-          set({ activeProjectName: proj.name, activeParts: proj.parts });
-        }
-      },
-
-      deleteProject: (id) => {
-        set((state) => ({
-          savedProjects: state.savedProjects.filter((p) => p.id !== id),
-        }));
-      },
-
-      startNewProject: () => {
-        set({ activeProjectName: 'New Project', activeParts: [] });
-      },
-
-      resetWorkshopData: () => set({ ...FRESH_STATE }),
+/** Drop saved nest + confirmed cut keys when the cut list changes. */
+function invalidatePlanForPartsChange(state: {
+  activeProjectName: string;
+  completedOperations: string[];
+  savedProjects: SavedProject[];
+  cloudRevision: number;
+}) {
+  const prefix = `${state.activeProjectName.trim()}-`;
+  return {
+    activeCuttingPlan: null as SavedCuttingPlan | null,
+    completedOperations: state.completedOperations.filter((op) => !op.startsWith(prefix)),
+    savedProjects: patchSavedProject(state.savedProjects, state.activeProjectName, {
+      cuttingPlan: undefined,
+      completedCutOps: [],
     }),
-    {
-      name: 'timbervault_v2',
-      version: 2,
-      migrate: (persistedState) => {
-        const state = (persistedState || {}) as Record<string, unknown>;
-        return {
-          ...state,
-          unitSystem: state.unitSystem === 'imperial' ? 'imperial' : 'metric',
-        };
-      },
+    cloudRevision: state.cloudRevision + 1,
+  };
+}
+
+export const useAppStore = create<AppState>()((set, get) => ({
+  ...FRESH_STATE,
+  cloudUserId: null,
+  cloudReady: false,
+  cloudSaving: false,
+  authChecked: false,
+  demoPreview: false,
+  cutHistory: [],
+  cloudRevision: 0,
+  revealSavedCuttingSheets: false,
+
+  setCloudUserId: (userId) => set({ cloudUserId: userId }),
+  setCloudReady: (ready) => set({ cloudReady: ready }),
+  setCloudSaving: (saving) => set({ cloudSaving: saving }),
+  setAuthChecked: (checked) => set({ authChecked: checked }),
+
+  hydrateFromCloud: (data) =>
+    set({
+      ...data,
+      defaultKerfMm: data.defaultKerfMm ?? DEFAULT_KERF_MM,
+      activeKerfMm: data.activeKerfMm ?? data.defaultKerfMm ?? DEFAULT_KERF_MM,
+      activeCuttingPlan: data.activeCuttingPlan ?? null,
+      cloudReady: true,
+      demoPreview: false,
+      cutHistory: [],
+      cloudRevision: 0,
+    }),
+
+  clearWorkshopMemory: () =>
+    set({
+      ...FRESH_STATE,
+      cloudUserId: null,
+      cloudReady: false,
+      cloudSaving: false,
+      authChecked: true,
+      demoPreview: false,
+      cutHistory: [],
+      cloudRevision: 0,
+      revealSavedCuttingSheets: false,
+    }),
+
+  loadDemoPreview: () => {
+    const demo = createDemoWorkspace();
+    set({
+      ...demo,
+      cloudUserId: null,
+      cloudReady: true,
+      cloudSaving: false,
+      authChecked: true,
+      demoPreview: true,
+      cutHistory: [],
+      cloudRevision: 0,
+      revealSavedCuttingSheets: false,
+    });
+  },
+
+  bumpCloudRevision: () => set((s) => ({ cloudRevision: s.cloudRevision + 1 })),
+
+  addBoard: (board) =>
+    set((state) => ({
+      boards: [board, ...state.boards],
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  removeBoard: (id) =>
+    set((state) => ({
+      boards: state.boards.filter((b) => b.id !== id),
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  updateBoard: (board) =>
+    set((state) => ({
+      boards: state.boards.map((b) => (b.id === board.id ? board : b)),
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  updateStorageLocations: (locations) =>
+    set((state) => ({
+      storageLocations: locations,
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  updateOffcutSettings: (settings) =>
+    set((state) => ({
+      offcutSettings: settings,
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  setUnitSystem: (system) =>
+    set((state) => ({
+      unitSystem: system,
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  setDefaultKerfMm: (mm) =>
+    set((state) => {
+      const kerf = Math.max(0, Number(mm) || 0);
+      return {
+        defaultKerfMm: kerf,
+        cloudRevision: state.cloudRevision + 1,
+      };
+    }),
+
+  setActiveKerfMm: (mm) =>
+    set((state) => ({
+      activeKerfMm: Math.max(0, Number(mm) || 0),
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  setActiveStrategy: (strategy) =>
+    set(() => ({
+      activeStrategy: strategy,
+    })),
+
+  processCuttingOperation: (opKey, newBoards, options) => {
+    set((state) => {
+      if (state.completedOperations.includes(opKey)) return state;
+
+      const takeFromLotTag = options?.takeFromLotTag;
+      const consumeExactTags = new Set(options?.consumeExactTags || []);
+      const restorations: CutHistoryEntry['restorations'] = [];
+
+      const findLot = (tag: string) => {
+        const baseTag = tag.replace(/-\d+$/, '');
+        return (
+          state.boards.find(
+            (b) =>
+              b.tagId === tag ||
+              b.id === tag ||
+              b.tagId === baseTag ||
+              tag.startsWith(`${b.id}#`) ||
+              (tag.startsWith(`${b.tagId}-`) && !tag.includes('-OP'))
+          ) || null
+        );
+      };
+
+      const updatedBoards = state.boards.map((b) => {
+        let next = b;
+
+        if (takeFromLotTag) {
+          const lot = findLot(takeFromLotTag);
+          if (lot && b.id === lot.id) {
+            restorations.push({
+              boardId: b.id,
+              boardTag: b.tagId,
+              prevStatus: b.status,
+              prevQuantity: b.quantity || 1,
+              prevUnitsIssued: b.unitsIssued || 0,
+            });
+            const qty = Math.max(1, b.quantity || 1);
+            const inferred = resolveUnitsIssued(b, state.boards);
+            const unitMatch = takeFromLotTag.match(
+              new RegExp(`^${escapeTag(b.tagId)}-(\\d+)(?:$|-)`)
+            );
+            const takenUnit = unitMatch ? Number(unitMatch[1]) : inferred + 1;
+            const nextIssued = Math.max(inferred, takenUnit);
+            next =
+              qty > 1
+                ? { ...b, quantity: qty - 1, status: 'active', unitsIssued: nextIssued }
+                : { ...b, status: 'consumed', quantity: 0, unitsIssued: nextIssued };
+          }
+        }
+
+        if (consumeExactTags.has(b.tagId)) {
+          if (!restorations.some((r) => r.boardId === b.id)) {
+            restorations.push({
+              boardId: b.id,
+              boardTag: b.tagId,
+              prevStatus: b.status,
+              prevQuantity: b.quantity || 1,
+              prevUnitsIssued: b.unitsIssued || 0,
+            });
+          }
+          next = { ...next, status: 'consumed' };
+        }
+
+        return next;
+      });
+
+      const historyEntry: CutHistoryEntry = {
+        opKey,
+        restorations,
+        createdBoardIds: newBoards.map((b) => b.id),
+      };
+
+      const nextCompleted = [...state.completedOperations, opKey];
+      const projPrefix = `${state.activeProjectName.trim()}-`;
+      const projOps = nextCompleted.filter((op) => op.startsWith(projPrefix));
+
+      return {
+        boards: [...newBoards, ...updatedBoards],
+        completedOperations: nextCompleted,
+        cutHistory: [...state.cutHistory, historyEntry],
+        savedProjects: patchSavedProject(state.savedProjects, state.activeProjectName, {
+          completedCutOps: projOps,
+          cuttingPlan: state.activeCuttingPlan || undefined,
+        }),
+        cloudRevision: state.cloudRevision + 1,
+      };
+    });
+  },
+
+  undoLastCut: () => {
+    const state = get();
+    if (state.cutHistory.length === 0) {
+      return { ok: false, message: 'Nothing to undo, no cuts confirmed yet.' };
     }
-  )
-);
+
+    const entry = state.cutHistory[state.cutHistory.length - 1];
+    const createdSet = new Set(entry.createdBoardIds);
+    const restoreMap = new Map(entry.restorations.map((r) => [r.boardId, r]));
+    const nextCompleted = state.completedOperations.filter((k) => k !== entry.opKey);
+    const projPrefix = `${state.activeProjectName.trim()}-`;
+    const projOps = nextCompleted.filter((op) => op.startsWith(projPrefix));
+
+    set({
+      boards: state.boards
+        .filter((b) => !createdSet.has(b.id))
+        .map((b) => {
+          const prev = restoreMap.get(b.id);
+          if (!prev) return b;
+          return {
+            ...b,
+            status: prev.prevStatus,
+            quantity: prev.prevQuantity,
+            unitsIssued: prev.prevUnitsIssued ?? b.unitsIssued,
+          };
+        }),
+      completedOperations: nextCompleted,
+      cutHistory: state.cutHistory.slice(0, -1),
+      savedProjects: patchSavedProject(state.savedProjects, state.activeProjectName, {
+        completedCutOps: projOps,
+      }),
+      cloudRevision: state.cloudRevision + 1,
+    });
+
+    const restored = entry.restorations.map((r) => r.boardTag).join(', ') || 'stock';
+    return {
+      ok: true,
+      message: `Undid last cut. Restored: ${restored}.`,
+    };
+  },
+
+  undoAllCuts: () => {
+    const total = get().cutHistory.length;
+    if (total === 0) {
+      return { ok: false, message: 'Nothing to undo, no cuts confirmed yet.' };
+    }
+
+    let undone = 0;
+    while (get().cutHistory.length > 0) {
+      const result = get().undoLastCut();
+      if (!result.ok) break;
+      undone += 1;
+    }
+
+    return {
+      ok: true,
+      message: `Undid ${undone} cut${undone === 1 ? '' : 's'}, stock restored, finished pieces and cut offcuts removed.`,
+    };
+  },
+
+  setActiveProjectName: (name) =>
+    set((state) => ({
+      activeProjectName: name,
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  setActiveParts: (parts) =>
+    set((state) => {
+      const invalidated = invalidatePlanForPartsChange(state);
+      return {
+        activeParts: parts,
+        ...invalidated,
+        // Keep the library copy in sync so What Can I Build sees the cut list
+        savedProjects: patchSavedProject(invalidated.savedProjects, state.activeProjectName, {
+          parts,
+          difficulty: state.savedProjects.find(
+            (p) => projectNameKey(p.name) === projectNameKey(state.activeProjectName)
+          )?.difficulty || 'Beginner',
+        }),
+      };
+    }),
+
+  addPartToActiveProject: (part) =>
+    set((state) => {
+      const activeParts = [...state.activeParts, part];
+      const invalidated = invalidatePlanForPartsChange(state);
+      const existing = state.savedProjects.find(
+        (p) => projectNameKey(p.name) === projectNameKey(state.activeProjectName)
+      );
+      return {
+        activeParts,
+        ...invalidated,
+        savedProjects: patchSavedProject(invalidated.savedProjects, state.activeProjectName, {
+          parts: activeParts,
+          difficulty: existing?.difficulty || 'Beginner',
+          description: existing?.description,
+        }),
+      };
+    }),
+
+  updatePartInActiveProject: (part) =>
+    set((state) => {
+      const activeParts = state.activeParts.map((p) => (p.id === part.id ? part : p));
+      const invalidated = invalidatePlanForPartsChange(state);
+      const existing = state.savedProjects.find(
+        (p) => projectNameKey(p.name) === projectNameKey(state.activeProjectName)
+      );
+      return {
+        activeParts,
+        ...invalidated,
+        savedProjects: patchSavedProject(invalidated.savedProjects, state.activeProjectName, {
+          parts: activeParts,
+          difficulty: existing?.difficulty || 'Beginner',
+          description: existing?.description,
+        }),
+      };
+    }),
+
+  removePartFromActiveProject: (id) =>
+    set((state) => {
+      const activeParts = state.activeParts.filter((p) => p.id !== id);
+      const invalidated = invalidatePlanForPartsChange(state);
+      const existing = state.savedProjects.find(
+        (p) => projectNameKey(p.name) === projectNameKey(state.activeProjectName)
+      );
+      return {
+        activeParts,
+        ...invalidated,
+        savedProjects: patchSavedProject(invalidated.savedProjects, state.activeProjectName, {
+          parts: activeParts,
+          difficulty: existing?.difficulty || 'Beginner',
+          description: existing?.description,
+        }),
+      };
+    }),
+
+  saveCuttingPlanToActiveProject: (plan) => {
+    const { activeProjectName, activeParts, activeKerfMm, savedProjects, completedOperations, cloudRevision } =
+      get();
+    const name = activeProjectName.trim();
+    if (!name || name.toLowerCase() === 'new project' || activeParts.length === 0) {
+      set({ activeCuttingPlan: plan, cloudRevision: cloudRevision + 1 });
+      return;
+    }
+
+    const prefix = `${name}-`;
+    const completedCutOps = completedOperations.filter((op) => op.startsWith(prefix));
+    const existingIdx = savedProjects.findIndex((p) => projectNameKey(p.name) === projectNameKey(name));
+    const existing = existingIdx >= 0 ? savedProjects[existingIdx] : undefined;
+
+    const projectData: SavedProject = {
+      id: existing?.id ?? Date.now().toString(),
+      name,
+      date: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      parts: activeParts,
+      kerfMm: activeKerfMm,
+      status: preservedProjectStatus(existing),
+      pauseReason: existing?.status === 'paused' ? existing.pauseReason : undefined,
+      description: existing?.description,
+      difficulty: existing?.difficulty,
+      cuttingPlan: plan,
+      completedCutOps,
+    };
+
+    const nextSaved =
+      existingIdx >= 0
+        ? savedProjects.map((p, i) => (i === existingIdx ? projectData : p))
+        : [projectData, ...savedProjects];
+
+    set({
+      savedProjects: nextSaved,
+      activeCuttingPlan: plan,
+      cloudRevision: cloudRevision + 1,
+    });
+  },
+
+  clearActiveCuttingPlan: () =>
+    set((state) => ({
+      ...invalidatePlanForPartsChange(state),
+    })),
+
+  saveCurrentProject: () => {
+    const {
+      activeProjectName,
+      activeParts,
+      activeKerfMm,
+      savedProjects,
+      activeCuttingPlan,
+      completedOperations,
+      cloudRevision,
+    } = get();
+    if (!activeProjectName.trim() || activeParts.length === 0) return;
+
+    const existingIdx = savedProjects.findIndex(
+      (p) => p.name.toLowerCase() === activeProjectName.trim().toLowerCase()
+    );
+
+    const existing = existingIdx >= 0 ? savedProjects[existingIdx] : undefined;
+    const name = activeProjectName.trim();
+    const prefix = `${name}-`;
+    const completedCutOps = completedOperations.filter((op) => op.startsWith(prefix));
+    const projectData: SavedProject = {
+      id: existing?.id ?? Date.now().toString(),
+      name,
+      date: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      parts: activeParts,
+      kerfMm: activeKerfMm,
+      status: preservedProjectStatus(existing),
+      pauseReason: existing?.status === 'paused' ? existing.pauseReason : undefined,
+      description: existing?.description,
+      difficulty: existing?.difficulty,
+      cuttingPlan: activeCuttingPlan || existing?.cuttingPlan,
+      completedCutOps:
+        completedCutOps.length > 0 ? completedCutOps : existing?.completedCutOps || [],
+    };
+
+    const nextSaved =
+      existingIdx >= 0
+        ? savedProjects.map((p, i) => (i === existingIdx ? projectData : p))
+        : [projectData, ...savedProjects];
+
+    // Keep the project open after save so you can generate cuts / continue working.
+    set({
+      savedProjects: nextSaved,
+      activeProjectName: projectData.name,
+      activeParts,
+      activeKerfMm,
+      activeCuttingPlan: projectData.cuttingPlan || null,
+      cloudRevision: cloudRevision + 1,
+    });
+  },
+
+  pauseActiveProject: (reason) => {
+    const {
+      activeProjectName,
+      activeParts,
+      activeKerfMm,
+      savedProjects,
+      activeCuttingPlan,
+      completedOperations,
+      defaultKerfMm,
+      cloudRevision,
+    } = get();
+    const name = activeProjectName.trim();
+    if (!name || name.toLowerCase() === 'new project') {
+      return { ok: false, message: 'Name the project before pausing it.' };
+    }
+    if (activeParts.length === 0) {
+      return { ok: false, message: 'Add at least one part before pausing.' };
+    }
+
+    const existingIdx = savedProjects.findIndex((p) => p.name.toLowerCase() === name.toLowerCase());
+    const existing = existingIdx >= 0 ? savedProjects[existingIdx] : undefined;
+    const prefix = `${name}-`;
+    const projectData: SavedProject = {
+      id: existing?.id ?? Date.now().toString(),
+      name,
+      date: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      parts: activeParts,
+      kerfMm: activeKerfMm,
+      status: 'paused',
+      pauseReason: reason.trim() || 'Waiting for matching stock.',
+      description: existing?.description,
+      difficulty: existing?.difficulty,
+      cuttingPlan: activeCuttingPlan || existing?.cuttingPlan,
+      completedCutOps: completedOperations.filter((op) => op.startsWith(prefix)),
+    };
+
+    const nextSaved =
+      existingIdx >= 0
+        ? savedProjects.map((p, i) => (i === existingIdx ? projectData : p))
+        : [projectData, ...savedProjects];
+
+    set({
+      savedProjects: nextSaved,
+      activeProjectName: 'New Project',
+      activeParts: [],
+      activeKerfMm: defaultKerfMm,
+      activeCuttingPlan: null,
+      cloudRevision: cloudRevision + 1,
+    });
+    return { ok: true, name };
+  },
+
+  resumeProject: (id) => {
+    const { savedProjects, completedOperations, defaultKerfMm, cloudRevision } = get();
+    const proj = savedProjects.find((p) => p.id === id);
+    if (!proj) return { ok: false, message: 'Project not found.' };
+
+    const nextSaved = savedProjects.map((p) =>
+      p.id === id ? { ...p, status: 'active' as const, pauseReason: undefined } : p
+    );
+    const prefix = `${proj.name}-`;
+    const withoutProj = completedOperations.filter((op) => !op.startsWith(prefix));
+    const restoredOps = [...withoutProj, ...(proj.completedCutOps || [])];
+
+    set({
+      savedProjects: nextSaved,
+      activeProjectName: proj.name,
+      activeParts: proj.parts,
+      activeKerfMm:
+        proj.kerfMm != null && Number.isFinite(proj.kerfMm)
+          ? Math.max(0, Number(proj.kerfMm))
+          : defaultKerfMm,
+      activeCuttingPlan: proj.cuttingPlan || null,
+      completedOperations: restoredOps,
+      cloudRevision: cloudRevision + 1,
+    });
+    return { ok: true, name: proj.name };
+  },
+
+  createOrOpenProject: (rawName) => {
+    const name = rawName.trim();
+    if (!name || name.toLowerCase() === 'new project') {
+      return { ok: false, message: 'Enter a real project name (e.g. Box, Cutting Board).' };
+    }
+    const { savedProjects, completedOperations, defaultKerfMm, cloudRevision } = get();
+    const existing = savedProjects.find((p) => p.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      const prefix = `${existing.name}-`;
+      const withoutProj = completedOperations.filter((op) => !op.startsWith(prefix));
+      set({
+        activeProjectName: existing.name,
+        activeParts: existing.parts,
+        activeKerfMm:
+          existing.kerfMm != null && Number.isFinite(existing.kerfMm)
+            ? Math.max(0, Number(existing.kerfMm))
+            : defaultKerfMm,
+        activeCuttingPlan: existing.cuttingPlan || null,
+        completedOperations: [...withoutProj, ...(existing.completedCutOps || [])],
+        cloudRevision: cloudRevision + 1,
+      });
+      return { ok: true, created: false };
+    }
+    const projectData: SavedProject = {
+      id: Date.now().toString(),
+      name,
+      date: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      parts: [],
+      kerfMm: defaultKerfMm,
+    };
+    set({
+      savedProjects: [projectData, ...savedProjects],
+      activeProjectName: name,
+      activeParts: [],
+      activeKerfMm: defaultKerfMm,
+      activeCuttingPlan: null,
+      cloudRevision: cloudRevision + 1,
+    });
+    return { ok: true, created: true };
+  },
+
+  markBoardsInstalled: (boardIds) => {
+    const idSet = new Set(boardIds.filter(Boolean));
+    if (idSet.size === 0) return 0;
+    const count = get().boards.filter((b) => idSet.has(b.id)).length;
+    if (count === 0) return 0;
+    set((state) => ({
+      boards: state.boards.map((b) =>
+        idSet.has(b.id) ? { ...b, status: 'consumed' as BoardStatus, quantity: 0 } : b
+      ),
+      cloudRevision: state.cloudRevision + 1,
+    }));
+    return count;
+  },
+
+  markProjectCompleted: (projectName, meta) => {
+    const name = projectName.trim();
+    if (!name || name.toLowerCase() === 'new project') {
+      return { ok: false, message: 'Name the project before marking it complete.' };
+    }
+    const { savedProjects, cloudRevision } = get();
+    const idx = savedProjects.findIndex((p) => projectNameKey(p.name) === projectNameKey(name));
+    if (idx < 0) {
+      return {
+        ok: false,
+        message: `No saved project named "${name}". Save it under Projects & Cuts first.`,
+      };
+    }
+    const existing = savedProjects[idx];
+    const next: SavedProject = {
+      ...existing,
+      status: 'completed',
+      pauseReason: undefined,
+      description:
+        meta?.description !== undefined
+          ? meta.description.trim()
+          : existing.description || `Completed build: ${existing.name}.`,
+      difficulty: meta?.difficulty || existing.difficulty || 'Beginner',
+      date: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+    };
+    set({
+      savedProjects: savedProjects.map((p, i) => (i === idx ? next : p)),
+      cloudRevision: cloudRevision + 1,
+    });
+    return { ok: true, id: next.id, name: next.name };
+  },
+
+  updateProjectShowcase: (id, meta) => {
+    const { savedProjects, cloudRevision } = get();
+    const idx = savedProjects.findIndex((p) => p.id === id);
+    if (idx < 0) return { ok: false, message: 'Project not found.' };
+    const existing = savedProjects[idx];
+    const next: SavedProject = {
+      ...existing,
+      ...(meta.description !== undefined ? { description: meta.description.trim() } : {}),
+      ...(meta.difficulty !== undefined ? { difficulty: meta.difficulty } : {}),
+    };
+    set({
+      savedProjects: savedProjects.map((p, i) => (i === idx ? next : p)),
+      cloudRevision: cloudRevision + 1,
+    });
+    return { ok: true };
+  },
+
+  syncActiveProjectToLibrary: () => {
+    const {
+      activeProjectName,
+      activeParts,
+      activeKerfMm,
+      activeCuttingPlan,
+      savedProjects,
+      completedOperations,
+      cloudRevision,
+    } = get();
+    const name = activeProjectName.trim();
+    if (!name || name.toLowerCase() === 'new project' || activeParts.length === 0) return;
+
+    const existingIdx = savedProjects.findIndex(
+      (p) => projectNameKey(p.name) === projectNameKey(name)
+    );
+    const existing = existingIdx >= 0 ? savedProjects[existingIdx] : undefined;
+    const prefix = `${name}-`;
+    const fromOps = completedOperations.filter((op) => op.startsWith(prefix));
+    const projectData: SavedProject = {
+      id: existing?.id ?? Date.now().toString(),
+      name,
+      date:
+        existing?.date ||
+        new Date().toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }),
+      parts: activeParts,
+      kerfMm: activeKerfMm,
+      status: preservedProjectStatus(existing),
+      pauseReason: existing?.status === 'paused' ? existing.pauseReason : undefined,
+      description: existing?.description,
+      difficulty: existing?.difficulty || 'Beginner',
+      cuttingPlan: activeCuttingPlan || existing?.cuttingPlan,
+      completedCutOps:
+        fromOps.length > 0 ? fromOps : existing?.completedCutOps || [],
+    };
+
+    // Skip bump if nothing meaningful changed (avoid save loops)
+    if (
+      existing &&
+      existing.parts.length === projectData.parts.length &&
+      partsFingerprint(existing.parts) === partsFingerprint(projectData.parts) &&
+      (existing.completedCutOps?.length || 0) === (projectData.completedCutOps?.length || 0) &&
+      existing.difficulty === projectData.difficulty
+    ) {
+      return;
+    }
+
+    const nextSaved =
+      existingIdx >= 0
+        ? savedProjects.map((p, i) => (i === existingIdx ? projectData : p))
+        : [projectData, ...savedProjects];
+
+    set({
+      savedProjects: nextSaved,
+      cloudRevision: cloudRevision + 1,
+    });
+  },
+
+  loadProject: (id, options) => {
+    const state = get();
+    const proj = state.savedProjects.find((p) => p.id === id);
+    if (!proj) return;
+    const prefix = `${proj.name}-`;
+    const withoutProj = state.completedOperations.filter((op) => !op.startsWith(prefix));
+    const plan = proj.cuttingPlan || null;
+    // Keep confirmed placements even if fingerprint format drifted; refresh fingerprint to current parts
+    const activeCuttingPlan =
+      plan && (plan.placements?.length || 0) > 0
+        ? { ...plan, partsFingerprint: partsFingerprint(proj.parts) }
+        : plan;
+    set({
+      activeProjectName: proj.name,
+      activeParts: proj.parts,
+      activeKerfMm:
+        proj.kerfMm != null && Number.isFinite(proj.kerfMm)
+          ? Math.max(0, Number(proj.kerfMm))
+          : state.defaultKerfMm,
+      activeCuttingPlan,
+      completedOperations: [...withoutProj, ...(proj.completedCutOps || [])],
+      revealSavedCuttingSheets: Boolean(options?.revealSheets && proj.parts.length > 0),
+      cloudRevision: state.cloudRevision + 1,
+    });
+  },
+
+  openProjectWithCuttingSheets: (id) => {
+    const proj = get().savedProjects.find((p) => p.id === id);
+    if (!proj) return { ok: false, message: 'Project not found.' };
+    const hasPlan = Boolean(proj.cuttingPlan?.placements?.length);
+    get().loadProject(id, { revealSheets: true });
+    const restored = Boolean(get().activeCuttingPlan?.placements?.length);
+    // Always expand cut sheets when the project has parts (restore plan or nest fresh)
+    if (get().activeParts.length > 0) {
+      set({ revealSavedCuttingSheets: true });
+    }
+    return {
+      ok: true,
+      name: proj.name,
+      hasPlan: hasPlan || restored,
+    };
+  },
+
+  clearRevealSavedCuttingSheets: () => set({ revealSavedCuttingSheets: false }),
+
+  deleteProject: (id) => {
+    set((state) => ({
+      savedProjects: state.savedProjects.filter((p) => p.id !== id),
+      cloudRevision: state.cloudRevision + 1,
+    }));
+  },
+
+  startNewProject: () => {
+    set((state) => ({
+      activeProjectName: 'New Project',
+      activeParts: [],
+      activeKerfMm: state.defaultKerfMm,
+      activeCuttingPlan: null,
+      revealSavedCuttingSheets: false,
+      cloudRevision: state.cloudRevision + 1,
+    }));
+  },
+
+  resetWorkshopData: () =>
+    set((state) => ({
+      ...FRESH_STATE,
+      // Keep shop prefs; wipe boards / projects / cut progress
+      storageLocations: state.storageLocations.length
+        ? state.storageLocations
+        : [...DEFAULT_LOCATIONS],
+      offcutSettings: state.offcutSettings,
+      unitSystem: state.unitSystem,
+      defaultKerfMm: state.defaultKerfMm,
+      activeKerfMm: state.defaultKerfMm,
+      cloudUserId: state.cloudUserId,
+      cloudReady: state.cloudReady,
+      cloudSaving: false,
+      cutHistory: [],
+      cloudRevision: state.cloudRevision + 1,
+    })),
+}));
