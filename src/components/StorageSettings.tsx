@@ -455,10 +455,10 @@ export default function StorageSettings() {
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="space-y-1">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-emerald-400" /> Daily Backups &amp; Device Safety Vault
+              <ShieldCheck className="w-5 h-5 text-emerald-400" /> Daily Workshop Backups
             </h3>
             <p className="text-xs text-gray-400 leading-relaxed">
-              Your workshop is automatically backed up every day to <strong className="text-gray-200">this device&apos;s IndexedDB vault</strong> (up to 30 daily snapshots + peak inventory snapshot) and to the cloud. You can also download a portable <code className="text-orange-300">.json</code> backup file to your computer or restore from any snapshot below.
+              Your boards and projects are automatically saved every day on this device and in your online account. You can also save a backup file to your computer or bring back any saved copy below.
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -491,11 +491,11 @@ export default function StorageSettings() {
                   },
                   'manual'
                 );
-                toast.success('Backup saved to device & downloaded as JSON.');
+                toast.success('Backup saved to your computer.');
               }}
               className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
             >
-              <HardDriveDownload className="w-4 h-4" /> Download backup to device (.json)
+              <HardDriveDownload className="w-4 h-4" /> Save backup to computer
             </button>
 
             <input
@@ -516,7 +516,7 @@ export default function StorageSettings() {
                 const merged = store.mergeBackupIntoWorkshop(parsed.payload);
                 await refreshBackupsList();
                 toast.success(
-                  `Imported backup: +${merged.addedBoards} boards, +${merged.addedProjects} projects merged.`
+                  `Backup restored: added ${merged.addedBoards} boards and ${merged.addedProjects} projects.`
                 );
               }}
             />
@@ -525,7 +525,7 @@ export default function StorageSettings() {
               onClick={() => fileInputRef.current?.click()}
               className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
             >
-              <Upload className="w-4 h-4 text-orange-400" /> Restore from backup file
+              <Upload className="w-4 h-4 text-orange-400" /> Load backup from computer
             </button>
           </div>
         </div>
@@ -540,21 +540,21 @@ export default function StorageSettings() {
               setAutoDownloadDailyPreference(next);
               toast.success(
                 next
-                  ? 'Daily JSON file auto-download enabled (once per day when you open Logger).'
-                  : 'Daily JSON file auto-download turned off (on-device IndexedDB daily backups stay active).'
+                  ? 'Daily backup download turned on (saves one file a day to your Downloads folder).'
+                  : 'Daily file download turned off (automatic daily backups in the app stay on).'
               );
             }}
             className="rounded border-gray-700 bg-[#121417] text-orange-500 focus:ring-orange-500"
           />
           <span>
-            Also auto-download a <code className="text-orange-300">.json</code> backup file to my Downloads folder once per day
+            Automatically save a backup file to my Downloads folder once a day
           </span>
         </label>
 
         {deviceBackups.length > 0 && (
           <div className="space-y-2 pt-2 border-t border-gray-800">
             <div className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
-              <History className="w-3.5 h-3.5 text-orange-400" /> On-device snapshots ({deviceBackups.length})
+              <History className="w-3.5 h-3.5 text-orange-400" /> Saved backups on this device ({deviceBackups.length})
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
               {deviceBackups.slice(0, 10).map((b) => (
@@ -563,7 +563,13 @@ export default function StorageSettings() {
                   className="bg-[#121417] border border-gray-800 rounded-xl p-3 flex items-center justify-between gap-2 text-xs"
                 >
                   <div className="min-w-0">
-                    <div className="font-bold text-white truncate">{b.label}</div>
+                    <div className="font-bold text-white truncate">
+                      {b.slot === 'latest'
+                        ? 'Most recent backup'
+                        : b.slot === 'highwater'
+                          ? 'Fullest workshop backup'
+                          : `Daily backup (${b.backupDate})`}
+                    </div>
                     <div className="text-[11px] text-gray-400 font-mono">
                       {b.boardCount} boards · {b.projectCount} projects ·{' '}
                       {new Date(b.createdAt).toLocaleString()}
@@ -575,24 +581,24 @@ export default function StorageSettings() {
                       onClick={() => {
                         const res = store.mergeBackupIntoWorkshop(b.payload);
                         if (res.addedBoards === 0 && res.addedProjects === 0) {
-                          toast.success('All boards and projects from this snapshot are already present.');
+                          toast.success('Everything in this backup is already in your workshop.');
                         } else {
                           toast.success(
-                            `Restored +${res.addedBoards} boards & +${res.addedProjects} projects.`
+                            `Restored ${res.addedBoards} boards and ${res.addedProjects} projects.`
                           );
                         }
                       }}
                       className="px-2.5 py-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-lg text-[11px] cursor-pointer"
                     >
-                      Restore missing
+                      Restore
                     </button>
                     <button
                       type="button"
                       onClick={() => downloadBackupFileToDevice(b.payload, b.slot.replace(':', '-'))}
                       className="px-2 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold rounded-lg text-[11px] cursor-pointer"
-                      title="Download this snapshot as a JSON file"
+                      title="Save a copy of this backup to your computer"
                     >
-                      JSON
+                      Save file
                     </button>
                   </div>
                 </div>
