@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import QuickLog from '@/components/QuickLog';
 import InventoryList from '@/components/InventoryList';
 import CutListNesting from '@/components/CutListNesting';
 import StorageSettings from '@/components/StorageSettings';
 import Dashboard from '@/components/Dashboard';
 import ProjectMatcher from '@/components/ProjectMatcher';
+import AdminPanel from '@/components/AdminPanel';
 import ScannerTab from '@/app/scanner';
 import CloudSync from '@/components/CloudSync';
 import AuthModal from '@/components/AuthModal';
@@ -22,10 +23,14 @@ import {
   QrCode,
   LogOut,
   LogIn,
+  Shield,
 } from 'lucide-react';
 import { toast } from '@/lib/notify';
 import { signOut } from '@/lib/supabase/auth';
 import BrandLogo from '@/components/BrandLogo';
+import { isAdminEmail } from '@/lib/admin';
+import { recordPageHit } from '@/lib/page-hits';
+import { getSupabase } from '@/lib/supabase/client';
 
 type TabType =
   | 'dashboard'
@@ -34,9 +39,10 @@ type TabType =
   | 'cut-list'
   | 'matcher'
   | 'scanner'
-  | 'storage';
+  | 'storage'
+  | 'admin';
 
-const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
+const BASE_TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: Layers },
   { id: 'quick-log', label: 'Quick Log', icon: PlusCircle },
   { id: 'inventory', label: 'Inventory', icon: List },
@@ -50,11 +56,47 @@ export default function Page() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [authOpen, setAuthOpen] = useState(false);
   const [loginGateOpen, setLoginGateOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const cloudUserId = useAppStore((s) => s.cloudUserId);
   const authChecked = useAppStore((s) => s.authChecked);
   const cloudReady = useAppStore((s) => s.cloudReady);
   const demoPreview = useAppStore((s) => s.demoPreview);
   const signedIn = Boolean(cloudUserId);
+  const showAdmin = signedIn && isAdminEmail(userEmail);
+
+  const tabs = useMemo(() => {
+    if (!showAdmin) return BASE_TABS;
+    return [...BASE_TABS, { id: 'admin' as const, label: 'Admin', icon: Shield }];
+  }, [showAdmin]);
+
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setUserEmail(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!cancelled) setUserEmail(data.session?.user?.email ?? null);
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!cancelled) setUserEmail(session?.user?.email ?? null);
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showAdmin && activeTab === 'admin') setActiveTab('dashboard');
+  }, [showAdmin, activeTab]);
+
+  useEffect(() => {
+    if (!signedIn || !authChecked) return;
+    void recordPageHit(activeTab, '/');
+  }, [activeTab, signedIn, authChecked]);
 
   const handleSignOut = async () => {
     const result = await signOut();
@@ -149,7 +191,7 @@ export default function Page() {
             </div>
 
             <nav className="flex items-center gap-1.5 bg-[#121417] p-1.5 rounded-xl border border-gray-800 flex-wrap">
-              {TABS.map(({ id, label, icon: Icon }) => (
+              {tabs.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
                   type="button"
@@ -192,6 +234,7 @@ export default function Page() {
                 )}
                 {activeTab === 'scanner' && <ScannerTab />}
                 {activeTab === 'storage' && <StorageSettings />}
+                {activeTab === 'admin' && showAdmin && <AdminPanel />}
               </>
             ) : null}
           </section>

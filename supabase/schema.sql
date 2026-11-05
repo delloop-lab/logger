@@ -252,3 +252,6 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- Admin analytics (profiles email/last_seen, page_hits, admin RLS):
+-- run supabase/migrate-admin-analytics.sql in the Supabase SQL editor.

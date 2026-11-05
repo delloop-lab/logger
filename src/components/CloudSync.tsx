@@ -9,6 +9,7 @@ import {
   loadWorkspace,
   saveWorkspace,
 } from '@/lib/supabase/workspace';
+import { syncUserProfile } from '@/lib/supabase/profile';
 
 /**
  * Auth + Supabase workspace bridge.
@@ -51,6 +52,7 @@ export default function CloudSync() {
 
       setCloudUserId(userId);
       setCloudReady(false);
+      void syncUserProfile();
       const result = await loadWorkspace(userId);
       if (cancelled) return;
 
