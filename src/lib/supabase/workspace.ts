@@ -549,7 +549,45 @@ export async function saveWorkspace(
     if (!del.ok) return del;
   }
 
+  // Best-effort daily snapshot in Supabase workspace_backups (if migration applied)
+  void saveCloudDailyBackup(userId, snapshot);
+
   return { ok: true };
+}
+
+/**
+ * Best-effort daily snapshot in `public.workspace_backups`.
+ * Never blocks or fails normal saves if the table isn't created yet.
+ */
+export async function saveCloudDailyBackup(
+  userId: string,
+  snapshot: WorkspaceSnapshot
+): Promise<void> {
+  if (!userId) return;
+  if (snapshot.boards.length === 0 && snapshot.savedProjects.length === 0) return;
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const now = new Date();
+  const backupDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
+
+  try {
+    await supabase.from('workspace_backups').upsert(
+      {
+        user_id: userId,
+        backup_date: backupDate,
+        board_count: snapshot.boards.length,
+        project_count: snapshot.savedProjects.length,
+        snapshot,
+        updated_at: now.toISOString(),
+      },
+      { onConflict: 'user_id,backup_date' }
+    );
+  } catch {
+    /* ignore if table does not exist yet */
+  }
 }
 
 /** Wipe leftover browser inventory keys — workshop data lives in Supabase only. */

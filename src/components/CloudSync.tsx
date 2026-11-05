@@ -9,6 +9,16 @@ import {
   loadWorkspace,
   saveWorkspace,
 } from '@/lib/supabase/workspace';
+import {
+  downloadBackupFileToDevice,
+  getAutoDownloadDailyPreference,
+  getBestRecoveryBackup,
+  hasDownloadedDailyFileToday,
+  hasMeaningfulWorkshopData,
+  markDownloadedDailyFileToday,
+  recordDeviceBackup,
+  todayDateString,
+} from '@/lib/backup-vault';
 import { syncUserProfile } from '@/lib/supabase/profile';
 
 /**
@@ -67,9 +77,73 @@ export default function CloudSync() {
 
       skipSaveRef.current = true;
       hydrateFromCloud(result.data);
+
+      // Protect against empty cloud state if this device has a non-empty backup vault
+      const bestDeviceBackup = await getBestRecoveryBackup(userId);
+      let recoveredFromDevice = false;
+      if (bestDeviceBackup) {
+        const cloudBoardsEmpty = (result.data.boards?.length || 0) === 0;
+        const cloudProjectsEmpty = (result.data.savedProjects?.length || 0) === 0;
+        const backupHasBoards = (bestDeviceBackup.payload.boards?.length || 0) > 0;
+        const backupHasProjects = (bestDeviceBackup.payload.savedProjects?.length || 0) > 0;
+
+        if ((cloudBoardsEmpty && backupHasBoards) || (cloudProjectsEmpty && backupHasProjects)) {
+          const merged = useAppStore.getState().mergeBackupIntoWorkshop({
+            boards: cloudBoardsEmpty ? bestDeviceBackup.payload.boards : [],
+            savedProjects: cloudProjectsEmpty ? bestDeviceBackup.payload.savedProjects : [],
+            storageLocations: bestDeviceBackup.payload.storageLocations,
+            lumberTypes: bestDeviceBackup.payload.lumberTypes,
+          });
+          if (merged.addedBoards > 0 || merged.addedProjects > 0) {
+            recoveredFromDevice = true;
+            toast.success(
+              `Restored ${merged.addedBoards} board${merged.addedBoards === 1 ? '' : 's'} & ${merged.addedProjects} project${merged.addedProjects === 1 ? '' : 's'} from device backup (${bestDeviceBackup.backupDate}).`
+            );
+          }
+        }
+      }
+
+      // Record today's on-device daily snapshot if the workshop has data
+      const afterHydrate = useAppStore.getState();
+      if (hasMeaningfulWorkshopData(afterHydrate)) {
+        const snap = {
+          boards: afterHydrate.boards,
+          savedProjects: afterHydrate.savedProjects,
+          storageLocations: afterHydrate.storageLocations,
+          lumberTypes: afterHydrate.lumberTypes,
+          activeProjectName: afterHydrate.activeProjectName,
+          activeParts: afterHydrate.activeParts,
+          completedOperations: afterHydrate.completedOperations,
+          offcutSettings: afterHydrate.offcutSettings,
+          unitSystem: afterHydrate.unitSystem,
+          defaultKerfMm: afterHydrate.defaultKerfMm,
+          activeKerfMm: afterHydrate.activeKerfMm,
+          activeCuttingPlan: afterHydrate.activeCuttingPlan,
+        };
+        await recordDeviceBackup(userId, snap);
+
+        if (getAutoDownloadDailyPreference() && !hasDownloadedDailyFileToday(userId)) {
+          const today = todayDateString();
+          downloadBackupFileToDevice(
+            {
+              version: 1,
+              exportedAt: new Date().toISOString(),
+              backupDate: today,
+              userId,
+              ...snap,
+            },
+            'daily'
+          );
+          markDownloadedDailyFileToday(userId, today);
+        }
+      }
+
       setAuthChecked(true);
       setTimeout(() => {
         skipSaveRef.current = false;
+        if (recoveredFromDevice) {
+          useAppStore.getState().bumpCloudRevision();
+        }
       }, 0);
     };
 
@@ -123,22 +197,27 @@ export default function CloudSync() {
         const allowEmptyWipe = !!state.pendingCloudEmptyWipe;
         const deletedBoardIds = [...state.pendingDeletedBoardIds];
         const deletedProjectIds = [...state.pendingDeletedProjectIds];
+        const snapshot = {
+          boards: state.boards,
+          storageLocations: state.storageLocations,
+          lumberTypes: state.lumberTypes,
+          savedProjects: state.savedProjects,
+          activeProjectName: state.activeProjectName,
+          activeParts: state.activeParts,
+          completedOperations: state.completedOperations,
+          offcutSettings: state.offcutSettings,
+          unitSystem: state.unitSystem,
+          defaultKerfMm: state.defaultKerfMm,
+          activeKerfMm: state.activeKerfMm,
+          activeCuttingPlan: state.activeCuttingPlan,
+        };
+        // Always write to the on-device backup vault first (unless user just ran Wipe)
+        if (!allowEmptyWipe && hasMeaningfulWorkshopData(snapshot)) {
+          void recordDeviceBackup(state.cloudUserId, snapshot);
+        }
         const result = await saveWorkspace(
           state.cloudUserId,
-          {
-            boards: state.boards,
-            storageLocations: state.storageLocations,
-            lumberTypes: state.lumberTypes,
-            savedProjects: state.savedProjects,
-            activeProjectName: state.activeProjectName,
-            activeParts: state.activeParts,
-            completedOperations: state.completedOperations,
-            offcutSettings: state.offcutSettings,
-            unitSystem: state.unitSystem,
-            defaultKerfMm: state.defaultKerfMm,
-            activeKerfMm: state.activeKerfMm,
-            activeCuttingPlan: state.activeCuttingPlan,
-          },
+          snapshot,
           { allowEmptyWipe, deletedBoardIds, deletedProjectIds }
         );
         if (result.ok) {

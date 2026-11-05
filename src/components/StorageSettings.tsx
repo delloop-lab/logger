@@ -1,12 +1,36 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { Sliders, Save, Plus, Trash2, Ruler, RotateCcw, Pencil, Check, X } from 'lucide-react';
+import {
+  Sliders,
+  Save,
+  Plus,
+  Trash2,
+  Ruler,
+  RotateCcw,
+  Pencil,
+  Check,
+  X,
+  HardDriveDownload,
+  Upload,
+  ShieldCheck,
+  History,
+} from 'lucide-react';
 import { notify, toast } from '@/lib/notify';
 import { displayToMm, formatDim, mmToDisplay, unitLabel, type UnitSystem } from '@/lib/units';
 import { getSupabase } from '@/lib/supabase/client';
 import { DEFAULT_LUMBER_TYPES } from '@/lib/store';
+import {
+  downloadBackupFileToDevice,
+  getAutoDownloadDailyPreference,
+  listDeviceBackups,
+  parseImportedBackupJson,
+  recordDeviceBackup,
+  setAutoDownloadDailyPreference,
+  todayDateString,
+  type StoredBackupRecord,
+} from '@/lib/backup-vault';
 
 export default function StorageSettings() {
   const store = useAppStore();
@@ -36,6 +60,22 @@ export default function StorageSettings() {
   const [editingLumber, setEditingLumber] = useState<string | null>(null);
   const [editLumberValue, setEditLumberValue] = useState('');
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [deviceBackups, setDeviceBackups] = useState<StoredBackupRecord[]>([]);
+  const [autoDownloadDaily, setAutoDownloadDaily] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const backupUserKey = store.cloudUserId || 'local-workshop';
+
+  const refreshBackupsList = async () => {
+    const list = await listDeviceBackups(backupUserKey);
+    setDeviceBackups(list);
+  };
+
+  useEffect(() => {
+    setAutoDownloadDaily(getAutoDownloadDailyPreference());
+    void refreshBackupsList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backupUserKey, store.boards.length, store.savedProjects.length]);
 
   useEffect(() => {
     setMinLength(String(mmToDisplay(settings.minLength, unitSystem, unitSystem === 'imperial' ? 2 : 0)));
@@ -409,6 +449,157 @@ export default function StorageSettings() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="bg-[#1e2228] border border-emerald-900/50 p-6 rounded-2xl space-y-4 shadow-xl">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-400" /> Daily Backups &amp; Device Safety Vault
+            </h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Your workshop is automatically backed up every day to <strong className="text-gray-200">this device&apos;s IndexedDB vault</strong> (up to 30 daily snapshots + peak inventory snapshot) and to the cloud. You can also download a portable <code className="text-orange-300">.json</code> backup file to your computer or restore from any snapshot below.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={async () => {
+                const snap = {
+                  boards: store.boards,
+                  savedProjects: store.savedProjects,
+                  storageLocations: store.storageLocations,
+                  lumberTypes: store.lumberTypes,
+                  activeProjectName: store.activeProjectName,
+                  activeParts: store.activeParts,
+                  completedOperations: store.completedOperations,
+                  offcutSettings: store.offcutSettings,
+                  unitSystem: store.unitSystem,
+                  defaultKerfMm: store.defaultKerfMm,
+                  activeKerfMm: store.activeKerfMm,
+                  activeCuttingPlan: store.activeCuttingPlan,
+                };
+                await recordDeviceBackup(backupUserKey, snap);
+                await refreshBackupsList();
+                downloadBackupFileToDevice(
+                  {
+                    version: 1,
+                    exportedAt: new Date().toISOString(),
+                    backupDate: todayDateString(),
+                    userId: backupUserKey,
+                    ...snap,
+                  },
+                  'manual'
+                );
+                toast.success('Backup saved to device & downloaded as JSON.');
+              }}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
+            >
+              <HardDriveDownload className="w-4 h-4" /> Download backup to device (.json)
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                const text = await file.text();
+                const parsed = parseImportedBackupJson(text);
+                if (!parsed.ok) {
+                  toast.error(parsed.message);
+                  return;
+                }
+                const merged = store.mergeBackupIntoWorkshop(parsed.payload);
+                await refreshBackupsList();
+                toast.success(
+                  `Imported backup: +${merged.addedBoards} boards, +${merged.addedProjects} projects merged.`
+                );
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-orange-400" /> Restore from backup file
+            </button>
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2.5 text-xs text-gray-300 cursor-pointer select-none pt-1">
+          <input
+            type="checkbox"
+            checked={autoDownloadDaily}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setAutoDownloadDaily(next);
+              setAutoDownloadDailyPreference(next);
+              toast.success(
+                next
+                  ? 'Daily JSON file auto-download enabled (once per day when you open Logger).'
+                  : 'Daily JSON file auto-download turned off (on-device IndexedDB daily backups stay active).'
+              );
+            }}
+            className="rounded border-gray-700 bg-[#121417] text-orange-500 focus:ring-orange-500"
+          />
+          <span>
+            Also auto-download a <code className="text-orange-300">.json</code> backup file to my Downloads folder once per day
+          </span>
+        </label>
+
+        {deviceBackups.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-gray-800">
+            <div className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
+              <History className="w-3.5 h-3.5 text-orange-400" /> On-device snapshots ({deviceBackups.length})
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+              {deviceBackups.slice(0, 10).map((b) => (
+                <div
+                  key={b.id}
+                  className="bg-[#121417] border border-gray-800 rounded-xl p-3 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <div className="font-bold text-white truncate">{b.label}</div>
+                    <div className="text-[11px] text-gray-400 font-mono">
+                      {b.boardCount} boards · {b.projectCount} projects ·{' '}
+                      {new Date(b.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const res = store.mergeBackupIntoWorkshop(b.payload);
+                        if (res.addedBoards === 0 && res.addedProjects === 0) {
+                          toast.success('All boards and projects from this snapshot are already present.');
+                        } else {
+                          toast.success(
+                            `Restored +${res.addedBoards} boards & +${res.addedProjects} projects.`
+                          );
+                        }
+                      }}
+                      className="px-2.5 py-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-lg text-[11px] cursor-pointer"
+                    >
+                      Restore missing
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadBackupFileToDevice(b.payload, b.slot.replace(':', '-'))}
+                      className="px-2 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold rounded-lg text-[11px] cursor-pointer"
+                      title="Download this snapshot as a JSON file"
+                    >
+                      JSON
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-[#1e2228] border border-red-900/50 p-6 rounded-2xl space-y-3 shadow-xl">

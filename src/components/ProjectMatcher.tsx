@@ -156,14 +156,13 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
     syncActiveProjectToLibrary();
   }, [syncActiveProjectToLibrary, savedProjects.length, completedOperations.length]);
 
-  // After a cloud wipe, put the known workshop projects back once
+  // After a cloud wipe, merge any missing known workshop projects back (even if 1 open project already pushed itself in)
   React.useEffect(() => {
-    if (savedProjects.length > 0) return;
     const result = restoreRecoveredProjects();
     if (result.added > 0) {
-      toast.success(`Restored ${result.added} workshop projects.`);
+      toast.success(`Restored ${result.added} workshop project${result.added === 1 ? '' : 's'}.`);
     }
-  }, [savedProjects.length, restoreRecoveredProjects]);
+  }, [restoreRecoveredProjects]);
 
   const activeBoards = boards.filter((b) => b.status === 'active');
 
@@ -304,9 +303,29 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2 px-1">
-          <Trophy className="w-4 h-4 text-orange-500" /> Your projects
-        </h3>
+        <div className="flex items-center justify-between gap-3 flex-wrap px-1">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-orange-500" /> Your projects ({assessedProjects.length})
+          </h3>
+          {assessedProjects.length < 5 && (
+            <button
+              type="button"
+              onClick={() => {
+                const result = restoreRecoveredProjects();
+                if (result.added === 0) {
+                  toast.success('All 5 workshop projects are already in the library.');
+                  return;
+                }
+                toast.success(
+                  `Restored ${result.added} missing project${result.added === 1 ? '' : 's'}.`
+                );
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white cursor-pointer"
+            >
+              Restore missing workshop projects
+            </button>
+          )}
+        </div>
 
         {assessedProjects.length === 0 ? (
           <div className="bg-[#1e2228] border border-dashed border-gray-700 p-8 rounded-2xl text-center text-sm text-gray-400 space-y-4">

@@ -309,6 +309,16 @@ interface AppState extends WorkspaceData {
    * Skips names that already exist. Bumps cloudRevision so CloudSync persists.
    */
   restoreRecoveredProjects: () => { ok: true; added: number; skipped: number };
+  /**
+   * Non-destructive restore from a daily backup or imported JSON file.
+   * Merges missing boards and projects into the current workshop and syncs to cloud.
+   */
+  mergeBackupIntoWorkshop: (payload: {
+    boards?: Board[];
+    savedProjects?: SavedProject[];
+    storageLocations?: string[];
+    lumberTypes?: string[];
+  }) => { addedBoards: number; addedProjects: number };
 }
 
 export const DEFAULT_LOCATIONS = [
@@ -435,12 +445,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
   setAuthChecked: (checked) => set({ authChecked: checked }),
 
   hydrateFromCloud: (data) => {
-    // Cloud wipe left an empty library — seed recovered workshop projects and
-    // bump revision so CloudSync writes them back with the fixed upsert path.
+    // Merge any missing recovered workshop projects into the cloud library
+    // (previously only ran when cloudProjects.length === 0, so 1 active project blocked the other 4).
     const cloudProjects = data.savedProjects || [];
-    const recovered =
-      cloudProjects.length === 0 ? buildRecoveredWorkshopProjects() : [];
-    const savedProjects = cloudProjects.length > 0 ? cloudProjects : recovered;
+    const recovered = buildRecoveredWorkshopProjects();
+    const existingNames = new Set(cloudProjects.map((p) => projectNameKey(p.name)));
+    const existingIds = new Set(cloudProjects.map((p) => String(p.id)));
+    const missingRecovered = recovered.filter(
+      (p) => !existingNames.has(projectNameKey(p.name)) && !existingIds.has(String(p.id))
+    );
+    const savedProjects = [...cloudProjects, ...missingRecovered];
     set({
       ...data,
       savedProjects,
@@ -454,7 +468,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       cloudReady: true,
       demoPreview: false,
       cutHistory: [],
-      cloudRevision: recovered.length > 0 ? 1 : 0,
+      cloudRevision: missingRecovered.length > 0 ? 1 : 0,
     });
   },
 
@@ -1308,5 +1322,60 @@ export const useAppStore = create<AppState>()((set, get) => ({
       cloudRevision: cloudRevision + 1,
     });
     return { ok: true as const, added: toAdd.length, skipped };
+  },
+
+  mergeBackupIntoWorkshop: (payload) => {
+    const state = get();
+    const incomingBoards = Array.isArray(payload.boards) ? payload.boards : [];
+    const incomingProjects = Array.isArray(payload.savedProjects) ? payload.savedProjects : [];
+
+    const existingBoardIds = new Set(state.boards.map((b) => String(b.id)));
+    const existingBoardTags = new Set(state.boards.map((b) => (b.tagId || '').toUpperCase()));
+    const boardsToAdd = incomingBoards.filter(
+      (b) =>
+        b &&
+        b.id &&
+        !existingBoardIds.has(String(b.id)) &&
+        !existingBoardTags.has((b.tagId || '').toUpperCase())
+    );
+
+    const existingProjIds = new Set(state.savedProjects.map((p) => String(p.id)));
+    const existingProjNames = new Set(state.savedProjects.map((p) => projectNameKey(p.name)));
+    const projectsToAdd = incomingProjects.filter(
+      (p) =>
+        p &&
+        p.id &&
+        !existingProjIds.has(String(p.id)) &&
+        !existingProjNames.has(projectNameKey(p.name))
+    );
+
+    const mergedLocations = Array.from(
+      new Set([...(state.storageLocations || []), ...(payload.storageLocations || [])])
+    ).filter(Boolean);
+
+    const mergedBoards = [...boardsToAdd, ...state.boards];
+    const mergedProjects = [...projectsToAdd, ...state.savedProjects];
+    const mergedLumberTypes = mergeLumberTypesWithStock(
+      [...(state.lumberTypes || []), ...(payload.lumberTypes || [])],
+      mergedBoards.map((b) => b.species)
+    );
+
+    if (
+      boardsToAdd.length === 0 &&
+      projectsToAdd.length === 0 &&
+      mergedLocations.length === state.storageLocations.length
+    ) {
+      return { addedBoards: 0, addedProjects: 0 };
+    }
+
+    set({
+      boards: mergedBoards,
+      savedProjects: mergedProjects,
+      storageLocations: mergedLocations.length ? mergedLocations : [...DEFAULT_LOCATIONS],
+      lumberTypes: mergedLumberTypes,
+      cloudRevision: state.cloudRevision + 1,
+    });
+
+    return { addedBoards: boardsToAdd.length, addedProjects: projectsToAdd.length };
   },
 }));
