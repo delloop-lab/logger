@@ -104,7 +104,7 @@ export default function QuickLog({ onLogged }: Props) {
           <PlusCircle className="w-5 h-5 text-orange-500" /> Quick Workshop Log
         </h3>
         <p className="text-xs text-gray-400 mt-0.5">
-          Log timber using {unitSystem === 'imperial' ? 'inches' : 'millimetres'}. Values are stored
+          Log timber using millimetres or inches, depending on your Settings. Values are stored
           internally in mm.
         </p>
       </div>

@@ -270,7 +270,7 @@ export default function ScannerTab() {
             {formatDimsLWT(found.length, found.width, found.thickness, unitSystem)}
             {(found.quantity || 1) > 1 ? ` · qty ${found.quantity}` : ''}
           </div>
-          <div className="text-gray-400">Location: {found.location || '—'}</div>
+          <div className="text-gray-400">Location: {found.location || 'None'}</div>
           <div className="text-gray-500">
             Status: {found.status}
             {found.classification ? ` · ${found.classification}` : ''}

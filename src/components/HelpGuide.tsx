@@ -28,41 +28,53 @@ function HelpShot({
   );
 }
 
-export default function HelpGuide() {
+export default function HelpGuide({
+  onOpenGettingStarted,
+}: {
+  onOpenGettingStarted?: () => void;
+}) {
   const version = formatAppVersion();
 
   return (
     <div className="space-y-6 text-sm text-gray-300 leading-relaxed">
       <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-100 text-xs font-medium">
-        <strong className="font-black tracking-wide">BETA</strong> — TimberVault is a beta
-        product and is being updated all the time. Screens and workflows may change between
+        <strong className="font-black tracking-wide">BETA</strong>; Logger (formally TimberVault) is
+        a beta product and is being updated all the time. Screens and workflows may change between
         sessions. You are on <span className="font-mono text-amber-200">{version}</span>.
       </div>
 
       <div className="rounded-xl border border-gray-700 bg-[#121417] px-4 py-3 text-xs text-gray-300">
-        Works in your <strong className="text-gray-100">browser</strong> — nothing to download or
+        Works in your <strong className="text-gray-100">browser</strong>. Nothing to download or
         install. Use it on your <strong className="text-gray-100">phone</strong>,{' '}
         <strong className="text-gray-100">tablet</strong>, or{' '}
         <strong className="text-gray-100">computer</strong>.
       </div>
 
-      <section className="space-y-2">
+      <section className="space-y-3">
         <h3 className="text-white font-black text-xs uppercase tracking-widest">What it is for</h3>
         <p>
-          TimberVault is a workshop timber inventory and cutting planner. Catalogue boards and
+          Logger is a workshop timber inventory and cutting planner. Catalogue boards and
           offcuts, plan projects with less waste, match builds to stock on hand, print QR stock
           tags, scan tags at the rack, and sync your workshop when signed in.
         </p>
-      </section>
-
-      <section className="space-y-2">
-        <h3 className="text-white font-black text-xs uppercase tracking-widest">Getting started</h3>
-        <ol className="list-decimal pl-5 space-y-1.5">
-          <li>Log in to load your workshop (demo preview may appear when signed out).</li>
-          <li>Choose mm or inches under Settings, and set your storage locations.</li>
-          <li>Add timber with Quick Log, then manage it in Inventory.</li>
-          <li>Create projects and cut lists under Projects &amp; Cuts when you are ready to cut.</li>
-        </ol>
+        {onOpenGettingStarted ? (
+          <button
+            type="button"
+            onClick={onOpenGettingStarted}
+            className="w-full text-left rounded-xl border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-100 hover:bg-orange-500/15 hover:border-orange-400/50 transition-colors cursor-pointer"
+          >
+            New here? Open{' '}
+            <span className="font-black text-orange-300 underline underline-offset-2 decoration-orange-400/60">
+              Getting started
+            </span>{' '}
+            for a short first-run walkthrough.
+          </button>
+        ) : (
+          <div className="rounded-xl border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm font-medium text-orange-100">
+            New here? Open <strong className="font-black text-orange-300">Getting started</strong>{' '}
+            for a short first-run walkthrough.
+          </div>
+        )}
       </section>
 
       <section className="space-y-5">
@@ -80,8 +92,8 @@ export default function HelpGuide() {
           </p>
           <HelpShot
             src="/help/help-tab-dashboard.png"
-            alt="TimberVault Dashboard tab showing stock stats and recent inventory"
-            caption="Dashboard — live workshop overview"
+            alt="Logger Dashboard tab showing stock stats and recent inventory"
+            caption="Dashboard: live workshop overview"
           />
         </div>
 
@@ -90,13 +102,13 @@ export default function HelpGuide() {
           <p className="text-xs text-gray-400">
             Fast way to add new timber to stock. Enter species, source, length / width / thickness,
             quantity, and storage location. Optionally mark defects (warp, knot, split, and so on)
-            plus notes. TimberVault assigns a lot tag id automatically (based on species). After
+            plus notes. Logger assigns a lot tag id automatically (based on species). After
             you save, the lot appears in Inventory and on the Dashboard.
           </p>
           <HelpShot
             src="/help/help-tab-quick-log.png"
-            alt="TimberVault Quick Log form for adding a new timber lot"
-            caption="Quick Log — add stock in one pass"
+            alt="Logger Quick Log form for adding a new timber lot"
+            caption="Quick Log: add stock in one pass"
           />
         </div>
 
@@ -112,8 +124,8 @@ export default function HelpGuide() {
           </p>
           <HelpShot
             src="/help/help-tab-inventory.png"
-            alt="TimberVault Inventory list with filters and board lots"
-            caption="Inventory — browse, filter, edit, and print tags"
+            alt="Logger Inventory list with filters and board lots"
+            caption="Inventory: browse, filter, edit, and print tags"
           />
         </div>
 
@@ -127,8 +139,8 @@ export default function HelpGuide() {
           </p>
           <HelpShot
             src="/help/help-tab-projects-cuts.png"
-            alt="TimberVault Projects and Cuts tab with saved projects and cut list steps"
-            caption="Projects & Cuts — name, parts, save, generate sheets"
+            alt="Logger Projects and Cuts tab with saved projects and cut list steps"
+            caption="Projects & Cuts: name, parts, save, generate sheets"
           />
         </div>
 
@@ -142,8 +154,8 @@ export default function HelpGuide() {
           </p>
           <HelpShot
             src="/help/help-tab-what-can-i-build.png"
-            alt="TimberVault What Can I Build tab matching projects to stock"
-            caption="What Can I Build? — READY / ALMOST / NEED STOCK"
+            alt="Logger What Can I Build tab matching projects to stock"
+            caption="What Can I Build?: READY / ALMOST / NEED STOCK"
           />
         </div>
 
@@ -151,14 +163,14 @@ export default function HelpGuide() {
           <h4 className="font-bold text-gray-100">QR Scanner</h4>
           <p className="text-xs text-gray-400">
             Find a board at the rack without typing. Start the camera (or upload a photo of a
-            tag), scan the printed QR, and TimberVault looks up the lot. You can also type or paste
+            tag), scan the printed QR, and Logger looks up the lot. You can also type or paste
             a tag id. A match shows species, dimensions, location, defects, and status so you pull
             the right piece.
           </p>
           <HelpShot
             src="/help/help-tab-qr-scanner.png"
-            alt="TimberVault QR Scanner tab with camera and manual tag lookup"
-            caption="QR Scanner — camera, photo, or manual tag lookup"
+            alt="Logger QR Scanner tab with camera and manual tag lookup"
+            caption="QR Scanner: camera, photo, or manual tag lookup"
           />
         </div>
 
@@ -172,8 +184,8 @@ export default function HelpGuide() {
           </p>
           <HelpShot
             src="/help/help-tab-settings.png"
-            alt="TimberVault Settings tab for units, kerf, offcuts, and locations"
-            caption="Settings — units, kerf, offcut rules, locations (account email blurred)"
+            alt="Logger Settings tab for units, kerf, offcuts, and locations"
+            caption="Settings: units, kerf, offcut rules, locations (account email blurred)"
           />
         </div>
       </section>
@@ -184,16 +196,16 @@ export default function HelpGuide() {
         </h3>
         <HelpShot
           src="/help/workshop-stock-tag.jpg"
-          alt="TimberVault workshop stock tag stapled to the end of a board, showing QR code, tag id, species, dimensions, and location"
-          caption="Example: a printed Workshop Stock Tag on a board end — scan the QR in Inventory / QR Scanner to look up the lot."
+          alt="Logger Stock Tag stapled to the end of a board, showing QR code, tag id, species, dimensions, and location"
+          caption="Example: a printed Stock Tag on a board end. Scan the QR in Inventory / QR Scanner to look up the lot."
         />
         <ul className="list-disc pl-5 space-y-1.5 text-xs">
           <li>
-            <strong className="text-gray-100">System Print</strong> — browser print dialog for a
+            <strong className="text-gray-100">System Print</strong>: browser print dialog for a
             large readable label on A4/Letter.
           </li>
           <li>
-            <strong className="text-gray-100">Save PNG</strong> — download the label as an image
+            <strong className="text-gray-100">Save PNG</strong>: download the label as an image
             file.
           </li>
         </ul>
@@ -220,13 +232,13 @@ export default function HelpGuide() {
           <div>
             <p className="font-bold text-gray-100">Metric or imperial?</p>
             <p className="text-gray-400 mt-0.5">
-              Either — switch in Settings. Display units change; stock stays consistent underneath.
+              Either. Switch in Settings. Display units change; stock stays consistent underneath.
             </p>
           </div>
           <div>
             <p className="font-bold text-gray-100">How do I report a problem?</p>
             <p className="text-gray-400 mt-0.5">
-              Use Contact in the footer —{' '}
+              Use Contact in the footer:{' '}
               <a
                 href="mailto:silvervirtual@gmail.com"
                 className="text-orange-400 hover:text-orange-300"
@@ -240,7 +252,7 @@ export default function HelpGuide() {
       </section>
 
       <p className="text-[11px] text-gray-500 border-t border-gray-800 pt-4">
-        Copyright (c) 2026 Trinagra Studio · {version}
+        Copyright (c) 2026 Lou Schillaci · {version}
       </p>
     </div>
   );

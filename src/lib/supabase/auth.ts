@@ -12,6 +12,18 @@ export async function getCurrentSession(): Promise<Session | null> {
   return data.session;
 }
 
+function isDuplicateEmailError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('already registered') ||
+    m.includes('already been registered') ||
+    m.includes('user already exists') ||
+    m.includes('email address is already') ||
+    m.includes('duplicate') ||
+    (m.includes('already') && m.includes('email'))
+  );
+}
+
 export async function signUpWithEmail(
   email: string,
   password: string
@@ -21,12 +33,32 @@ export async function signUpWithEmail(
     return { ok: false, message: 'Supabase is not configured yet.' };
   }
 
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const normalizedEmail = email.trim().toLowerCase();
+  const { data, error } = await supabase.auth.signUp({
+    email: normalizedEmail,
+    password,
+  });
+
   if (error) {
+    if (isDuplicateEmailError(error.message)) {
+      return {
+        ok: false,
+        message: 'That email is already registered. Sign in instead, or use a different email.',
+      };
+    }
     return { ok: false, message: error.message };
   }
   if (!data.user) {
     return { ok: false, message: 'Sign up did not return a user.' };
+  }
+
+  // Supabase may return a user with no identities when the email is already taken
+  // (avoids leaking existence in some project configs). Treat as duplicate.
+  if (!data.user.identities || data.user.identities.length === 0) {
+    return {
+      ok: false,
+      message: 'That email is already registered. Sign in instead, or use a different email.',
+    };
   }
 
   // Email confirmation may be required depending on project Auth settings.
@@ -34,7 +66,7 @@ export async function signUpWithEmail(
     return {
       ok: true,
       user: data.user,
-      message: 'Account created. Check your email to confirm, then sign in.',
+      message: 'Check your email to confirm your address, then sign in.',
     };
   }
 

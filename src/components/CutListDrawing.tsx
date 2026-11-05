@@ -840,7 +840,7 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
               className="cut-sheet-page bg-white text-zinc-900 border-2 border-zinc-900 p-6 rounded-lg shadow-md space-y-5"
             >
               <div className="hidden print:flex items-center justify-between text-[11px] font-mono text-zinc-600 border-b border-zinc-300 pb-2 mb-1">
-                <span>TimberVault cutting sheet</span>
+                <span>Logger cutting sheet</span>
                 <span>{activeProjectName}</span>
               </div>
               <div className="flex justify-between items-center border-b-2 border-zinc-900 pb-3">

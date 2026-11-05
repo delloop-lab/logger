@@ -42,7 +42,7 @@ function friendlyMediaError(err: unknown): string {
     return 'Windows camera driver is still busy from an earlier session. Close other tabs/apps using the camera (or restart the browser once to clear the OS lock), or use "Scan QR from photo" below.';
   }
   if (name === 'NotReadableError' || /NotReadableError|TrackStartError|in use/i.test(message)) {
-    return 'Camera is in use by another app or tab. Close it, then tap Retry — or use "Scan QR from photo" below.';
+    return 'Camera is in use by another app or tab. Close it, then tap Retry, or use "Scan QR from photo" below.';
   }
   if (name === 'NotAllowedError' || /Permission|denied/i.test(message)) {
     return 'Camera permission denied. Allow camera access in the address bar, then retry.';
@@ -338,7 +338,7 @@ export function useCameraStream(): CameraStreamState {
           await syncDeviceListFromRunningStream();
           if (!unmountedRef.current) {
             setError(
-              `"${target.label}" could not start and was skipped — kept your working camera.`
+              `"${target.label}" could not start and was skipped. Kept your working camera.`
             );
           }
         } catch {

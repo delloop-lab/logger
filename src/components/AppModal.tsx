@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import BrandLogo from '@/components/BrandLogo';
 
 type AppModalProps = {
   open: boolean;
@@ -9,8 +10,8 @@ type AppModalProps = {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
-  /** Wider dialog for forms with more fields */
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** Wider dialog for forms with more fields; `app` matches main computer layout (max-w-6xl) */
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'app';
   /** Hide the X button (e.g. forced confirm) */
   hideClose?: boolean;
 };
@@ -20,10 +21,11 @@ const SIZE_CLASS = {
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-3xl',
+  app: 'max-w-6xl',
 };
 
 /**
- * Shared TimberVault modal — always centered, dark workshop styling.
+ * Shared Logger modal — always centered, dark workshop styling.
  */
 export default function AppModal({
   open,
@@ -59,13 +61,14 @@ export default function AppModal({
         onClick={hideClose ? undefined : onClose}
       />
       <div
-        className={`relative w-full ${SIZE_CLASS[size]} bg-[#1e2228] border border-gray-700/80 rounded-2xl shadow-2xl shadow-black/50 p-6 space-y-5 text-gray-100 max-h-[min(90vh,720px)] overflow-y-auto`}
+        className={`relative w-full ${SIZE_CLASS[size]} bg-[#1e2228] border border-gray-700/80 rounded-2xl shadow-2xl shadow-black/50 p-6 space-y-5 text-gray-100 max-h-[min(92vh,900px)] overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-gray-800 pb-4">
           <div className="min-w-0">
+            <BrandLogo size="md" className="mb-2" />
             <h2 id="app-modal-title" className="text-base font-black text-white tracking-wide">
-              {title}
+              {title.replace(/^(TimberVault|Logger)\s*[·•\-–—:]?\s*/i, '')}
             </h2>
             {subtitle ? <p className="text-xs text-gray-400 mt-1">{subtitle}</p> : null}
           </div>

@@ -221,8 +221,8 @@ export const STRATEGY_META: Record<
   { label: string; short: string; description: string }
 > = {
   auto: {
-    label: 'Let Timber Vault Decide (Recommended)',
-    short: 'Timber Vault Decide',
+    label: 'Let Logger Decide (Recommended)',
+    short: 'Logger Decide',
     description:
       'Compares crosscut-first, rip-first, and offcut-preserving layouts and picks the most practical shop sequence.',
   },
@@ -1584,7 +1584,7 @@ function buildPlainExplanation(
 
   const prefix =
     selected === 'auto'
-      ? `Timber Vault chose ${STRATEGY_META[effective].short}: `
+      ? `Logger chose ${STRATEGY_META[effective].short}: `
       : `${STRATEGY_META[selected].short}: `;
 
   return `${prefix}${seqDesc} on ${boards} (${plan.placements.length} total shop steps).${offcutDesc}`;

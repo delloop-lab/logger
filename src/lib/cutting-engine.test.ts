@@ -765,7 +765,7 @@ describe('Master Spec §6–§12: intelligent shop sequences & A/B vs legacy', (
       },
     ];
     // 6x300 = 1816mm on 2000mm board → Crosscut First takes 12 steps (6 blanks + 6 rips),
-    // so Timber Vault recommends switching to Rip First (1 rip + 6 crosscuts = 7 steps)!
+    // so Logger recommends switching to Rip First (1 rip + 6 crosscuts = 7 steps)!
     const plan = createCuttingPlan([board], parts, {
       kerfMm: 3.2,
       strategy: 'crosscut-first',

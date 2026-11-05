@@ -4,7 +4,7 @@ import NotifyHost from '@/components/NotifyHost';
 import AppFooter from '@/components/AppFooter';
 
 export const metadata = {
-  title: 'TimberVault, Workshop Timber Inventory',
+  title: 'Logger, Workshop Timber Inventory',
   description: 'Timber inventory, projects, and cutting plans for the workshop',
 };
 

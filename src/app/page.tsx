@@ -17,7 +17,6 @@ import {
   List,
   Scissors,
   Settings,
-  Wrench,
   Layers,
   Sparkles,
   QrCode,
@@ -26,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@/lib/notify';
 import { signOut } from '@/lib/supabase/auth';
+import BrandLogo from '@/components/BrandLogo';
 
 type TabType =
   | 'dashboard'
@@ -113,19 +113,16 @@ export default function Page() {
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-2xl font-black text-white tracking-wide flex items-center gap-2">
-                    <Wrench className="w-6 h-6 text-orange-500" /> TimberVault
+                  <h1 className="m-0">
+                    <BrandLogo size="lg" />
                   </h1>
-                  <span className="bg-orange-600/20 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded border border-orange-500/30 uppercase tracking-widest">
-                    Workshop
-                  </span>
                 </div>
                 <p className="text-xs text-gray-400">
                   Catalogue timber, plan projects, and cut with less waste.
                 </p>
                 {demoPreview && !signedIn && (
                   <p className="text-[11px] text-amber-300/90 mt-1">
-                    Demo preview — sample data only. Log in to load your workshop.
+                    Demo preview, sample data only. Log in or sign up, it&apos;s free.
                   </p>
                 )}
               </div>
@@ -206,7 +203,7 @@ export default function Page() {
           open={loginGateOpen && !signedIn}
           onClose={() => setLoginGateOpen(false)}
           title="Log in required"
-          subtitle="You need to login to your workshop to see stock, projects, cutting drawings etc."
+          subtitle="You need to log in or register to see stock, projects, cutting drawings, and more."
           size="md"
         >
           <button

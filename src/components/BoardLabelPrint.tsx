@@ -63,7 +63,7 @@ export function boardLabelQrValue(tagId: string) {
 }
 
 /**
- * Renders the TimberVault board label (branding header + QR code + stock metadata)
+ * Renders the Logger board label (branding header + QR code + stock metadata)
  * onto an offscreen 1-bit pure black/white (#000000 / #FFFFFF) 384px-wide thermal
  * label canvas (58mm @ 203 DPI) with zero grey anti-aliased pixels, exact 5px
  * integer QR module scaling (29 × 5 = 145px), and reinforced bold stroke text.
@@ -94,18 +94,18 @@ export async function renderBoardLabelToPngDataUrl(
   ctx.fillRect(0, 0, 4, height);
   ctx.fillRect(width - 4, 0, 4, height);
 
-  // 3. Top TimberVault branding banner (34px tall solid black header)
+  // 3. Top Logger branding banner (34px tall solid black header)
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, width, 34);
 
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
   ctx.font = '900 16px "Arial Black", Impact, sans-serif';
-  ctx.fillText('TIMBERVAULT', 10, 18);
+  ctx.fillText('LOGGER', 10, 18);
 
   ctx.font = '900 11px Consolas, "Courier New", monospace';
   ctx.textAlign = 'right';
-  ctx.fillText('WORKSHOP STOCK TAG', width - 10, 18);
+  ctx.fillText('STOCK TAG', width - 10, 18);
   ctx.textAlign = 'left';
 
   // 4. Draw QR code at exact integer module multiple (29 modules × 5px = 145×145px)
@@ -230,7 +230,7 @@ export async function renderBoardLabelToPngDataUrl(
 
     // Storage Location — larger bold monospace (Source omitted per workshop label spec)
     drawBoldText(
-      `Loc: ${board.location || '—'}`,
+      `Loc: ${board.location || 'None'}`,
       textX,
       154,
       '900 19px Consolas, "Courier New", monospace',
@@ -467,7 +467,7 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
     if (isBusy) return;
     setActiveOperation('scanning');
     setLastResult(null);
-    setStatusMessage('Scanning Bluetooth for thermal printers (~15–20s)...');
+    setStatusMessage('Scanning Bluetooth for thermal printers (about 15 to 20s)...');
 
     try {
       const res = await fetch('/api/timini-print', {
@@ -529,9 +529,9 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
           className="bg-white text-black rounded-xl border-[3px] border-black print:rounded-none"
         >
           <div className="board-label-header bg-black text-white px-4 py-1.5 flex items-center justify-between font-mono">
-            <span className="board-label-brand text-xs font-black tracking-wider">TIMBERVAULT</span>
+            <span className="board-label-brand text-xs font-black tracking-wider">LOGGER</span>
             <span className="board-label-subtitle text-[10px] font-black text-white tracking-wide">
-              WORKSHOP STOCK TAG
+              STOCK TAG
             </span>
           </div>
           <div className="board-label-body p-4 flex items-start gap-4">
@@ -556,7 +556,7 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
                 {formatDimsLWT(board.length, board.width, board.thickness, unitSystem)}
               </div>
               <div className="board-label-loc text-base font-black text-black leading-tight">
-                Loc: {board.location || '—'}
+                Loc: {board.location || 'None'}
               </div>
             </div>
           </div>
@@ -777,7 +777,7 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
 
                 <div>
                   <label className="block text-[11px] text-gray-400 mb-1">
-                    Darkness 1–5 (<code>--darkness</code>)
+                    Darkness 1 to 5 (<code>--darkness</code>)
                   </label>
                   <select
                     value={config.darkness}

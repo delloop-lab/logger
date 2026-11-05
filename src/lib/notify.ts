@@ -1,6 +1,9 @@
 /**
- * Single centered workshop alert API (replaces react-hot-toast + window.confirm).
+ * Workshop notifications:
+ * - success / error / info → lightweight corner toasts (react-hot-toast)
+ * - confirm / choice → centered modal dialogs (NotifyHost)
  */
+import hotToast from 'react-hot-toast';
 
 export type NotifyKind = 'success' | 'error' | 'info' | 'confirm' | 'choice';
 
@@ -89,15 +92,24 @@ function defaultTitle(kind: NotifyKind): string {
   }
 }
 
+const toastStyle = {
+  background: '#1e2228',
+  color: '#f3f4f6',
+  border: '1px solid #374151',
+  borderRadius: '12px',
+  fontSize: '13px',
+  fontWeight: 600,
+} as const;
+
 export const notify = {
-  success(message: string, title = defaultTitle('success')) {
-    return push({ kind: 'success', title, message });
+  success(message: string, _title = defaultTitle('success')) {
+    return hotToast.success(message, { style: toastStyle, duration: 3200 });
   },
-  error(message: string, title = defaultTitle('error')) {
-    return push({ kind: 'error', title, message });
+  error(message: string, _title = defaultTitle('error')) {
+    return hotToast.error(message, { style: toastStyle, duration: 4200 });
   },
-  info(message: string, title = defaultTitle('info')) {
-    return push({ kind: 'info', title, message });
+  info(message: string, _title = defaultTitle('info')) {
+    return hotToast(message, { style: toastStyle, duration: 3500 });
   },
   confirm(options: {
     title?: string;
@@ -136,10 +148,7 @@ export const notify = {
   },
 };
 
-/**
- * Drop-in for react-hot-toast call sites.
- * Prefer `notify.*` for new code.
- */
+/** Drop-in for call sites — lightweight corner toasts only. */
 export const toast = {
   success(message: string) {
     return notify.success(message);

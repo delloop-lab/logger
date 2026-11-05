@@ -6,8 +6,8 @@ export function extractTagFromScan(raw: string): string {
   const text = (raw || '').trim();
   if (!text) return '';
 
-  // timbervault:PIN-001-1 or timbervault://tag/PIN-001-1
-  const protocol = text.match(/^timbervault:(?:\/\/(?:tag\/)?)?(.+)$/i);
+  // logger:PIN-001-1 / timbervault:PIN-001-1 (legacy labels still scan)
+  const protocol = text.match(/^(?:logger|timbervault):(?:\/\/(?:tag\/)?)?(.+)$/i);
   if (protocol?.[1]) return protocol[1].trim().toUpperCase();
 
   try {

@@ -157,7 +157,7 @@ export type WorkspaceData = {
   defaultKerfMm: number;
   /** Kerf for the project currently open (mm) — change anytime for a different blade */
   activeKerfMm: number;
-  /** Preferred cutting strategy (§4) — defaults to 'auto' (Let Timber Vault Decide) */
+  /** Preferred cutting strategy (§4) — defaults to 'auto' (Let Logger Decide) */
   activeStrategy?: CuttingStrategy;
   /** Working copy of the open project's saved cutting plan (if any). */
   activeCuttingPlan: SavedCuttingPlan | null;

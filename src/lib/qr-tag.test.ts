@@ -10,6 +10,10 @@ describe('extractTagFromScan', () => {
     expect(extractTagFromScan('timbervault:PIN-042')).toBe('PIN-042');
   });
 
+  it('reads logger protocol', () => {
+    expect(extractTagFromScan('logger:PIN-042')).toBe('PIN-042');
+  });
+
   it('reads JSON payloads', () => {
     expect(extractTagFromScan('{"tagId":"OAK-12"}')).toBe('OAK-12');
   });
