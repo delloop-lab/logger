@@ -56,16 +56,27 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
   );
 
   useEffect(() => {
+    // Idle / regenerate: always take current inventory (boards logged while paused, edits, etc.)
     if (!cuttingInProgress) {
       setLockedStock(liveStock);
     }
   }, [liveStock, cuttingInProgress, activeProjectName, partsKey]);
 
+  // Plan cleared (Generate / Resume) → unlock immediately even if a prior confirm frame lingered
+  useEffect(() => {
+    if (!activeCuttingPlan) {
+      setLockedStock(liveStock);
+    }
+  }, [activeCuttingPlan, liveStock]);
+
   const nestStock = lockedStock ?? liveStock;
 
-  // While a plan is attached to the open project, always show that copy (confirmed sequence).
-  // Parts edits clear the plan in the store; Regenerate clears it before nesting again.
-  const useSavedPlan = (activeCuttingPlan?.placements?.length || 0) > 0;
+  // Use the saved nest only when it still matches the current cut list.
+  // Stale plans (e.g. Base still Pine after you switched it to Plywood) must re-nest.
+  const useSavedPlan =
+    (activeCuttingPlan?.placements?.length || 0) > 0 &&
+    (!activeCuttingPlan?.partsFingerprint ||
+      activeCuttingPlan.partsFingerprint === partsKey);
 
   const plan = useMemo((): CuttingPlan => {
     if (useSavedPlan && activeCuttingPlan) {
@@ -171,8 +182,8 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
     const reasonText = lines.join('\n\n');
     void (async () => {
       const action = await notify.choice({
-        title: 'Parts missing from cut plan',
-        message: `${reasonText}\n\nSteps below only cover parts that fit. Pause this project while you buy the correct stock, then Resume when it is logged.`,
+        title: 'Some parts did not fit',
+        message: `${reasonText}\n\nThe steps below only include parts that fit on current stock. You can pause until you log more boards, or continue and cut what fits now.`,
         actions: [
           { id: 'pause', label: 'Pause project (buy stock later)', primary: true },
           { id: 'continue', label: 'Continue with what fits' },
@@ -833,6 +844,43 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
             finishedSteps.findIndex(
               (s) => s.stepIndex === step.stepIndex && s.boardTag === step.boardTag
             ) + 1;
+          const nextFinished = physicalSteps.find(
+            (s) =>
+              s.stepIndex > step.stepIndex &&
+              nestRootTag(s.boardTag) === nestTag &&
+              isFinishedPlacement(s) &&
+              (!step.stripKey || !s.stripKey || s.stripKey === step.stripKey)
+          );
+          const pieceHeadline = isFinishedStep
+            ? step.partName
+            : isBlank
+              ? nextFinished
+                ? `Blank for ${nextFinished.partName}`
+                : step.partName
+              : isRip && !isFinishedStep
+                ? nextFinished
+                  ? `Rip strip for ${nextFinished.partName}`
+                  : step.partName
+                : step.partName;
+          const stepSubtitle = isBlank
+            ? 'Blank cut — preserve long offcut (no finished piece yet)'
+            : isRip && !isFinishedStep
+              ? 'Rip only — strip for later crosscuts'
+              : isRip && isFinishedStep
+                ? `Finished piece ${partOrdinal} of ${finishedSteps.length} (rip from blank)`
+                : `Finished piece ${partOrdinal} of ${finishedSteps.length} (crosscut)`;
+          // Length physically in hand (prefer frameLen when it is the remaining strip)
+          const stockL = Number(step.stockLen) || 0;
+          const frameL = Number(step.frameLen) || 0;
+          const inHandLen =
+            frameL > 0.5 && stockL > 0.5
+              ? Math.min(frameL, stockL)
+              : frameL > 0.5
+                ? frameL
+                : stockL > 0.5
+                  ? stockL
+                  : step.cutLen;
+          const inHandWid = Number(step.stockWid) > 0.5 ? Number(step.stockWid) : step.cutWid;
 
           return (
             <div
@@ -843,39 +891,65 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                 <span>Logger cutting sheet</span>
                 <span>{activeProjectName}</span>
               </div>
-              <div className="flex justify-between items-center border-b-2 border-zinc-900 pb-3">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="bg-zinc-900 text-white font-mono text-sm px-3 py-1 font-bold">
-                    STEP {step.stepIndex} OF {physicalSteps.length}
-                  </span>
-                  <h2 className="text-lg font-black tracking-wide uppercase text-zinc-900">
-                    {isBlank
-                      ? `Blank cut (preserve long offcut): ${step.partName}`
-                      : isRip && !isFinishedStep
-                        ? `Rip only (no finished piece): ${step.partName}`
-                        : isRip && isFinishedStep
-                          ? `Finished piece ${partOrdinal}/${finishedSteps.length} (rip from blank): ${step.partName}`
-                          : `Finished piece ${partOrdinal}/${finishedSteps.length}: ${step.partName}`}
-                  </h2>
+              <div className="border-b-2 border-zinc-900 pb-3 space-y-2">
+                <div className="flex justify-between items-start gap-3 flex-wrap">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="bg-zinc-900 text-white font-mono text-sm px-3 py-1 font-bold">
+                        STEP {step.stepIndex} OF {physicalSteps.length}
+                      </span>
+                      <span className="font-mono text-xs text-zinc-500 uppercase tracking-wide">
+                        {activeProjectName}
+                      </span>
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 leading-tight">
+                      {pieceHeadline}
+                    </h2>
+                    <p className="text-sm font-mono text-zinc-600 uppercase tracking-wide">
+                      {stepSubtitle}
+                    </p>
+                  </div>
+                  {isCompleted && (
+                    <span className="bg-emerald-700 text-white text-xs px-3 py-1 font-bold rounded flex items-center gap-1 shrink-0">
+                      <CheckCircle2 className="w-4 h-4" /> COMPLETED
+                    </span>
+                  )}
                 </div>
-                {isCompleted && (
-                  <span className="bg-emerald-700 text-white text-xs px-3 py-1 font-bold rounded flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4" /> COMPLETED
-                  </span>
-                )}
               </div>
+
+              {isBlank && (
+                <div className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-[12px] text-sky-950 font-sans leading-snug">
+                  <strong>One stock board, two saw setups.</strong> This step only crosscuts a short
+                  blank. The next step rips the finished part from that blank — it is not a second
+                  board from inventory. The long leftover (
+                  {formatDim(step.remLen, unitSystem)} × {formatDim(step.remWid, unitSystem)}) goes
+                  back on the rack whole.
+                </div>
+              )}
+              {isRip && isFinishedStep && (
+                <div className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-[12px] text-sky-950 font-sans leading-snug">
+                  <strong>Still the same lot ({nestTag}).</strong> Pull the short blank from the
+                  previous blank-cut step — length in hand is{' '}
+                  {formatDim(step.stockLen, unitSystem)}, not the long rack offcut.
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
                 <div className="bg-zinc-50 p-4 border border-zinc-300 rounded space-y-1">
                   <div className="font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-300 pb-1 mb-2">
-                    <Box className="w-4 h-4 text-orange-600" /> WHAT TO PULL (STOCK):
+                    <Box className="w-4 h-4 text-orange-600" />{' '}
+                    {isBlank
+                      ? 'WHAT TO PULL (PARENT BOARD):'
+                      : isRip && isFinishedStep
+                        ? 'WHAT TO PULL (BLANK IN HAND):'
+                        : 'WHAT TO PULL (STOCK):'}
                   </div>
                   <div>
                     Tag Ref: <strong className="text-orange-700">{pullTag}</strong>
                   </div>
                   {!isFirstCutOnBoard && (
                     <div className="text-[11px] text-emerald-700 font-sans">
-                      Same board {nestTag}, earlier parts already cut out (see grey on map).
+                      Same lot {nestTag} — not a new board from the rack.
                     </div>
                   )}
                   <div>
@@ -885,11 +959,29 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                     Location: <strong className="text-zinc-900">{step.location}</strong>
                   </div>
                   <div>
-                    Original board:{' '}
+                    {isBlank ? 'Parent board size' : isRip ? 'Piece in hand now' : 'Board in hand'}:{' '}
                     <strong className="text-zinc-900">
-                      {formatDimsLWT(step.stockLen, step.stockWid, step.thickness, unitSystem)}
+                      {formatDimsLWT(inHandLen, inHandWid, step.thickness, unitSystem)}
                     </strong>
                   </div>
+                  {!isBlank && !isRip && step.remLen > 0.5 && (
+                    <div className="text-[11px] text-zinc-600 font-sans pt-1">
+                      After this crosscut, strip tip left{' '}
+                      <strong>
+                        {formatDim(step.remLen, unitSystem)} × {formatDim(step.remWid || inHandWid, unitSystem)}
+                      </strong>
+                      .
+                    </div>
+                  )}
+                  {isBlank && step.remLen > 0.5 && (
+                    <div className="text-[11px] text-zinc-600 font-sans pt-1">
+                      After this crosscut, rack the long leftover{' '}
+                      <strong>
+                        {formatDim(step.remLen, unitSystem)} × {formatDim(step.remWid, unitSystem)}
+                      </strong>{' '}
+                      (that length is scrap/offcut to keep whole — not the blank you rip next).
+                    </div>
+                  )}
                   {(() => {
                     const lot =
                       findSourceLot(pullTag, boards) || findSourceLot(step.boardTag, boards);
@@ -913,17 +1005,17 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                       <div>
                         Operation:{' '}
                         <strong className="text-zinc-900">
-                          Crosscut a short blank, keep the rest of the board whole
+                          Crosscut a short blank only (no finished part yet)
                         </strong>
                       </div>
                       <div>
-                        Blank size:{' '}
+                        Blank you keep for the next step:{' '}
                         <strong className="text-zinc-900">
                           {formatDim(step.cutLen, unitSystem)} × {formatDim(step.cutWid, unitSystem)}
                         </strong>
                       </div>
                       <div>
-                        Continuous offcut left:{' '}
+                        Long leftover to rack (do not rip this):{' '}
                         <strong className="text-zinc-900">
                           {formatDim(step.remLen, unitSystem)} × {formatDim(step.remWid, unitSystem)}
                         </strong>
@@ -940,7 +1032,7 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                         Operation:{' '}
                         <strong className="text-zinc-900">
                           {isFinishedStep
-                            ? `Rip finished piece (${formatDim(step.cutLen, unitSystem)} × ${formatDim(step.cutWid, unitSystem)}) from blank`
+                            ? `Rip finished piece (${formatDim(step.cutLen, unitSystem)} × ${formatDim(step.cutWid, unitSystem)}) from the short blank`
                             : 'Rip along the long edge (one pass)'}
                         </strong>
                       </div>
@@ -982,9 +1074,9 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                   </div>
                   <div className="pt-2 mt-2 border-t border-zinc-300 text-[11px] text-zinc-600 font-sans">
                     {isBlank
-                      ? 'Blank-first: take only what you need now; leave one long continuous offcut.'
+                      ? 'Blank-first keeps one long continuous offcut instead of ripping the full board length.'
                       : isRip
-                        ? 'Rip, strip in hand and odd piece set aside.'
+                        ? 'Rip the blank in hand; odd width is set aside.'
                         : isFirstCutOnBoard
                           ? 'Crosscut from the strip, take this rectangle; leftover on the strip stays a shorter rectangle.'
                           : 'Hatch = removed. Cut letter = this crosscut. Dark gap = kerf.'}

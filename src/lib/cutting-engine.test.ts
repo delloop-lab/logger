@@ -892,4 +892,54 @@ describe('Master Spec §6–§12: intelligent shop sequences & A/B vs legacy', (
     expect(heavyKerf.unallocated).toHaveLength(1);
     expect(finished(heavyKerf)).toHaveLength(3);
   });
+
+  it('31. allocates leftover Pine parts across a second fitting board and explains narrow non-fitting boards when short', () => {
+    const narrow: EngineBoard = {
+      id: 'pin-1',
+      tagId: 'PIN-001',
+      species: 'Pine / Pallet',
+      source: 'Pallet',
+      length: 2000,
+      width: 85,
+      thickness: 16,
+      status: 'active',
+    };
+    const wide1: EngineBoard = {
+      id: 'pin-2',
+      tagId: 'PIN-002',
+      species: 'Pine / Pallet',
+      source: 'Pallet',
+      length: 1200,
+      width: 100,
+      thickness: 16,
+      status: 'active',
+    };
+    const wide2: EngineBoard = {
+      id: 'pin-3',
+      tagId: 'PIN-003',
+      species: 'Pine / Pallet',
+      source: 'Pallet',
+      length: 1200,
+      width: 100,
+      thickness: 16,
+      status: 'active',
+    };
+    const parts: EnginePart[] = [
+      { id: 'sa', name: 'Long side A', species: 'Pine / Pallet', length: 500, width: 100, thickness: 16, quantity: 1 },
+      { id: 'sb', name: 'Long side B', species: 'Pine / Pallet', length: 500, width: 100, thickness: 16, quantity: 1 },
+      { id: 'ends', name: 'Short side', species: 'Pine / Pallet', length: 300, width: 100, thickness: 16, quantity: 2 },
+    ];
+
+    // With two 1200×100 boards, all 4 parts fit across PIN-002 and PIN-003
+    const full = createCuttingPlan([narrow, wide1, wide2], parts);
+    expect(full.unallocated).toHaveLength(0);
+    expect(full.usedBoardTags.sort()).toEqual(['PIN-002', 'PIN-003']);
+
+    // With only one 1200×100 board + narrow 2000×85, one 500×100 side cannot fit on PIN-001 (85 < 100)
+    const short = createCuttingPlan([narrow, wide1], parts);
+    expect(short.unallocated).toHaveLength(1);
+    const msg = diagnoseUnallocated(short.unallocated[0], [narrow, wide1]);
+    expect(msg).toContain('PIN-002');
+    expect(msg).toContain('PIN-001: too narrow/short (2000×85mm < 500×100mm)');
+  });
 });

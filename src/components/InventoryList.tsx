@@ -20,6 +20,25 @@ import { displayToMm, formatDimsLWT, mmToDisplay, unitLabel } from '@/lib/units'
 import { DEFECT_OPTIONS, formatDefectsList, type DefectType } from '@/lib/defects';
 import AppModal from '@/components/AppModal';
 import BoardLabelPrint from '@/components/BoardLabelPrint';
+import SpeciesSelect from '@/components/SpeciesSelect';
+
+const SOURCE_OPTIONS = [
+  'New',
+  'Pallet',
+  'Salvaged',
+  'Cut-off',
+  'Furniture Teardown',
+  'Offcut Bin',
+  'Purchased',
+] as const;
+
+function showDescriptionForSource(source: string) {
+  return source === 'Salvaged' || source === 'Furniture Teardown';
+}
+
+function showSupplierForSource(source: string) {
+  return source === 'New' || source === 'Purchased';
+}
 
 type SortField =
   | 'tagId'
@@ -474,131 +493,233 @@ export default function InventoryList() {
         open={Boolean(editingBoard)}
         onClose={() => setEditingBoard(null)}
         title={editingBoard ? `Edit board (${editingBoard.tagId})` : 'Edit board'}
-        subtitle="Update lot details in inventory"
-        size="md"
+        subtitle="Same fields as Quick Log"
+        size="lg"
       >
         {editingBoard && (
-          <form onSubmit={handleSaveEdit} className="space-y-3">
+          <form onSubmit={handleSaveEdit} className="space-y-4">
             <div>
-              <label className="block text-[11px] font-medium text-gray-400 mb-1">Tag ID</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Tag ID</label>
               <input
                 type="text"
                 value={editingBoard.tagId}
                 onChange={(e) => setEditingBoard({ ...editingBoard, tagId: e.target.value })}
-                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Species</label>
-                <input
-                  type="text"
+                <label className="block text-xs font-medium text-gray-400 mb-1">Wood Species</label>
+                <SpeciesSelect
                   value={editingBoard.species}
-                  onChange={(e) => setEditingBoard({ ...editingBoard, species: e.target.value })}
-                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
+                  onChange={(species) => setEditingBoard({ ...editingBoard, species })}
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Source</label>
-                <input
-                  type="text"
-                  value={editingBoard.source}
-                  onChange={(e) => setEditingBoard({ ...editingBoard, source: e.target.value })}
-                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
-                />
+                <label className="block text-xs font-medium text-gray-400 mb-1">Source / Origin</label>
+                <select
+                  value={
+                    SOURCE_OPTIONS.includes(editingBoard.source as (typeof SOURCE_OPTIONS)[number])
+                      ? editingBoard.source
+                      : editingBoard.source || 'Pallet'
+                  }
+                  onChange={(e) => {
+                    const source = e.target.value;
+                    const keepNotes =
+                      showDescriptionForSource(source) || showSupplierForSource(source)
+                        ? editingBoard.notes
+                        : undefined;
+                    setEditingBoard({ ...editingBoard, source, notes: keepNotes });
+                  }}
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
+                >
+                  {!SOURCE_OPTIONS.includes(editingBoard.source as (typeof SOURCE_OPTIONS)[number]) &&
+                  editingBoard.source ? (
+                    <option value={editingBoard.source}>{editingBoard.source}</option>
+                  ) : null}
+                  {SOURCE_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div
+              className={`grid grid-cols-1 gap-4 ${
+                showDescriptionForSource(editingBoard.source) ||
+                showSupplierForSource(editingBoard.source)
+                  ? 'md:grid-cols-2'
+                  : ''
+              }`}
+            >
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Length ({u})</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Storage Location
+                </label>
+                <select
+                  value={
+                    activeLocations.includes(editingBoard.location)
+                      ? editingBoard.location
+                      : activeLocations[0] || editingBoard.location
+                  }
+                  onChange={(e) => setEditingBoard({ ...editingBoard, location: e.target.value })}
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
+                >
+                  {!activeLocations.includes(editingBoard.location) && editingBoard.location ? (
+                    <option value={editingBoard.location}>{editingBoard.location}</option>
+                  ) : null}
+                  {activeLocations.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {showDescriptionForSource(editingBoard.source) && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">
+                    Description <span className="font-normal text-gray-500">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editingBoard.notes || ''}
+                    onChange={(e) =>
+                      setEditingBoard({
+                        ...editingBoard,
+                        notes: e.target.value.trim() ? e.target.value : undefined,
+                      })
+                    }
+                    placeholder="e.g. bedhead, stool leg"
+                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                  />
+                </div>
+              )}
+              {showSupplierForSource(editingBoard.source) && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">
+                    Supplier <span className="font-normal text-gray-500">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editingBoard.notes || ''}
+                    onChange={(e) =>
+                      setEditingBoard({
+                        ...editingBoard,
+                        notes: e.target.value.trim() ? e.target.value : undefined,
+                      })
+                    }
+                    placeholder="e.g. Bunnings, local timber yard"
+                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Length ({u})</label>
                 <input
                   type="number"
                   step="any"
-                  value={mmToDisplay(editingBoard.length, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                  value={mmToDisplay(
+                    editingBoard.length,
+                    unitSystem,
+                    unitSystem === 'imperial' ? 2 : 1
+                  )}
                   onChange={(e) =>
                     setEditingBoard({
                       ...editingBoard,
                       length: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
                     })
                   }
-                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Width ({u})</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Width ({u})</label>
                 <input
                   type="number"
                   step="any"
-                  value={mmToDisplay(editingBoard.width, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                  value={mmToDisplay(
+                    editingBoard.width,
+                    unitSystem,
+                    unitSystem === 'imperial' ? 2 : 1
+                  )}
                   onChange={(e) =>
                     setEditingBoard({
                       ...editingBoard,
                       width: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
                     })
                   }
-                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Thick ({u})</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Thickness ({u})
+                </label>
                 <input
                   type="number"
                   step="any"
-                  value={mmToDisplay(editingBoard.thickness, unitSystem, unitSystem === 'imperial' ? 2 : 1)}
+                  value={mmToDisplay(
+                    editingBoard.thickness,
+                    unitSystem,
+                    unitSystem === 'imperial' ? 2 : 1
+                  )}
                   onChange={(e) =>
                     setEditingBoard({
                       ...editingBoard,
                       thickness: displayToMm(parseFloat(e.target.value) || 0, unitSystem),
                     })
                   }
-                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-gray-400 mb-1">
-                Project
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                Quantity in this lot
               </label>
               <input
-                type="text"
-                value={editingBoard.originProject || ''}
+                type="number"
+                min={1}
+                value={editingBoard.quantity || 1}
                 onChange={(e) =>
-                  setEditingBoard({ ...editingBoard, originProject: e.target.value || undefined })
+                  setEditingBoard({
+                    ...editingBoard,
+                    quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
+                  })
                 }
-                placeholder="e.g. Box, Cutting Board"
-                list="inventory-project-names"
-                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
               />
-              <datalist id="inventory-project-names">
-                {projectOptions.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
             </div>
 
-            <div className="space-y-2 rounded-xl border border-amber-800/40 bg-amber-950/20 p-3">
-              <label className="flex items-center gap-1.5 text-[11px] font-medium text-amber-300">
-                <AlertTriangle className="w-3.5 h-3.5" /> Defects
+            <div className="space-y-2 rounded-xl border border-amber-800/40 bg-amber-950/20 p-3.5">
+              <label className="flex items-center gap-2 text-xs font-medium text-amber-300">
+                <AlertTriangle className="w-3.5 h-3.5" /> Defects on this stock
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {DEFECT_OPTIONS.map((d) => {
                   const checked = (editingBoard.defects || []).includes(d);
                   return (
                     <label
                       key={d}
-                      className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer"
+                      className={`flex items-center gap-2 text-[11px] rounded-lg px-2.5 py-1.5 cursor-pointer border ${
+                        checked
+                          ? 'border-amber-600/60 bg-amber-950/40 text-amber-200'
+                          : 'border-gray-800 bg-[#121417] text-gray-300'
+                      }`}
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => {
                           const cur = (editingBoard.defects || []) as DefectType[];
-                          const next = checked
-                            ? cur.filter((x) => x !== d)
-                            : [...cur, d];
+                          const next = checked ? cur.filter((x) => x !== d) : [...cur, d];
                           setEditingBoard({
                             ...editingBoard,
                             defects: next.length ? next : undefined,
@@ -611,63 +732,36 @@ export default function InventoryList() {
                   );
                 })}
               </div>
-              <input
-                type="text"
-                value={editingBoard.defectNotes || ''}
-                onChange={(e) =>
-                  setEditingBoard({
-                    ...editingBoard,
-                    defectNotes: e.target.value || undefined,
-                  })
-                }
-                placeholder="Notes, e.g. screw holes near one end"
-                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Qty in lot</label>
+                <label className="block text-[11px] font-medium text-gray-400 mb-1">
+                  Defect notes (optional)
+                </label>
                 <input
-                  type="number"
-                  min={1}
-                  value={editingBoard.quantity || 1}
+                  type="text"
+                  value={editingBoard.defectNotes || ''}
                   onChange={(e) =>
                     setEditingBoard({
                       ...editingBoard,
-                      quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
+                      defectNotes: e.target.value || undefined,
                     })
                   }
-                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  placeholder="e.g. screw holes near one end, avoid for face panels"
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white"
                 />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">Storage Location</label>
-                <select
-                  value={editingBoard.location}
-                  onChange={(e) => setEditingBoard({ ...editingBoard, location: e.target.value })}
-                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
-                >
-                  {activeLocations.map((loc, idx) => (
-                    <option key={idx} value={loc}>
-                      {loc}
-                    </option>
-                  ))}
-                </select>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3">
+            <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setEditingBoard(null)}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-orange-600/30 cursor-pointer"
+                className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-orange-600/30 cursor-pointer"
               >
                 <Check className="w-4 h-4" /> Save Changes
               </button>

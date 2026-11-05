@@ -298,9 +298,20 @@ export function speciesMatches(required: string, boardSpecies: string): boolean 
   return false;
 }
 
+/** Prefer nested dimensions when present (cut remnants / legacy rows). */
+export function resolvedBoardDims(board: EngineBoard & {
+  dimensions?: { length?: number; width?: number; thickness?: number };
+}): { length: number; width: number; thickness: number } {
+  const d = board.dimensions;
+  return {
+    length: Number(d?.length ?? board.length ?? 0) || 0,
+    width: Number(d?.width ?? board.width ?? 0) || 0,
+    thickness: Number(d?.thickness ?? board.thickness ?? 0) || 0,
+  };
+}
+
 function boardFaceFits(board: EngineBoard, piece: CutPiece): boolean {
-  const L = Number(board.length) || 0;
-  const W = Number(board.width) || 0;
+  const { length: L, width: W } = resolvedBoardDims(board);
   const pl = Number(piece.length) || 0;
   const pw = Number(piece.width) || 0;
   if (pl <= L + 1e-6 && pw <= W + 1e-6) return true;
@@ -308,35 +319,127 @@ function boardFaceFits(board: EngineBoard, piece: CutPiece): boolean {
   return false;
 }
 
+function formatStockBrief(
+  board: EngineBoard & { dimensions?: { length?: number; width?: number; thickness?: number } }
+): string {
+  const { length, width, thickness } = resolvedBoardDims(board);
+  return `${board.tagId} (${Math.round(length)}×${Math.round(width)}×${Math.round(thickness)} mm)`;
+}
+
+function formatFittingStockSummary(
+  fitting: EngineBoard[]
+): { fitTags: string; count: number } {
+  const sorted = fitting.slice().sort((a, b) => {
+    const da = resolvedBoardDims(a);
+    const db = resolvedBoardDims(b);
+    return db.length * db.width - da.length * da.width;
+  });
+  const count = sorted.length;
+  const shown = sorted.slice(0, 6).map(formatStockBrief).join(', ');
+  const fitTags = count > 6 ? `${shown}, +${count - 6} more` : shown;
+  return { fitTags, count };
+}
+
 /**
  * Human-readable reason a part could not nest (wrong species, too small, too thin, etc.).
+ * Pass `otherMatchingStock` when other boards of the same species exist in inventory
+ * so the user sees why those boards could not take this piece either (e.g. 85mm wide vs 100mm needed).
  */
 export function diagnoseUnallocated(
   piece: CutPiece,
   boards: EngineBoard[]
 ): string {
+  const needL = Math.round(Number(piece.length) || 0);
+  const needW = Math.round(Number(piece.width) || 0);
+  const needT = Math.round(Number(piece.thickness) || 0);
   const active = boards.filter((b) => (b.status || 'active') !== 'consumed');
   const matching = active.filter((b) => speciesMatches(piece.species, b.species));
 
   if (matching.length === 0) {
-    return `No ${piece.species} stock logged. Add a ${piece.species} board/sheet at least ${Math.round(piece.length)}×${Math.round(piece.width)} mm before cutting this part.`;
+    return `No ${piece.species} stock logged. Add a ${piece.species} board/sheet at least ${needL}×${needW}${needT ? `×${needT}` : ''} mm before cutting this part.`;
   }
 
   const thickOk = matching.filter((b) => canFitThickness(b, piece));
   if (thickOk.length === 0) {
-    const thickest = matching.reduce((a, b) => (a.thickness >= b.thickness ? a : b));
-    return `${piece.species} stock is too thin (need ${piece.thickness} mm, thickest on hand is ${thickest.thickness} mm on ${thickest.tagId}).`;
+    const thickest = matching.reduce((a, b) =>
+      resolvedBoardDims(a).thickness >= resolvedBoardDims(b).thickness ? a : b
+    );
+    const largeFace = matching.reduce((a, b) => {
+      const da = resolvedBoardDims(a);
+      const db = resolvedBoardDims(b);
+      return da.length * da.width >= db.length * db.width ? a : b;
+    });
+    const lf = resolvedBoardDims(largeFace);
+    return `${piece.species} stock is too thin (need ${needT} mm). Thickest on hand: ${formatStockBrief(thickest)}. Largest face (still too thin): ${largeFace.tagId} (${Math.round(lf.length)}×${Math.round(lf.width)}×${Math.round(lf.thickness)} mm).`;
   }
 
   const faceOk = thickOk.filter((b) => boardFaceFits(b, piece));
   if (faceOk.length === 0) {
-    const largest = thickOk.reduce((a, b) =>
-      a.length * a.width >= b.length * b.width ? a : b
-    );
-    return `${piece.species} stock is too small for ${Math.round(piece.length)}×${Math.round(piece.width)} mm. Largest ${piece.species} on hand: ${largest.tagId} (${Math.round(largest.length)}×${Math.round(largest.width)} mm).`;
+    const largest = thickOk.reduce((a, b) => {
+      const da = resolvedBoardDims(a);
+      const db = resolvedBoardDims(b);
+      return da.length * da.width >= db.length * db.width ? a : b;
+    });
+    const widest = thickOk.reduce((a, b) => {
+      const da = resolvedBoardDims(a);
+      const db = resolvedBoardDims(b);
+      const aMax = Math.max(da.length, da.width);
+      const bMax = Math.max(db.length, db.width);
+      // Prefer the board with the greater minimum face dimension (harder constraint)
+      const aMin = Math.min(da.length, da.width);
+      const bMin = Math.min(db.length, db.width);
+      if (aMin !== bMin) return aMin >= bMin ? a : b;
+      return aMax >= bMax ? a : b;
+    });
+    const ld = resolvedBoardDims(largest);
+    const wd = resolvedBoardDims(widest);
+    const onHand = thickOk
+      .slice()
+      .sort((a, b) => {
+        const da = resolvedBoardDims(a);
+        const db = resolvedBoardDims(b);
+        return db.length * db.width - da.length * da.width;
+      })
+      .slice(0, 5)
+      .map(formatStockBrief)
+      .join(', ');
+
+    const thinButLarge = matching.filter((b) => !canFitThickness(b, piece));
+    let thinNote = '';
+    if (thinButLarge.length > 0) {
+      const bestThin = thinButLarge.reduce((a, b) => {
+        const da = resolvedBoardDims(a);
+        const db = resolvedBoardDims(b);
+        return da.length * da.width >= db.length * db.width ? a : b;
+      });
+      thinNote = ` Also logged but too thin: ${formatStockBrief(bestThin)}.`;
+    }
+
+    return `${piece.species} stock is too small for ${needL}×${needW} mm (need one board face at least that size; rotation allowed). Largest thick enough: ${largest.tagId} (${Math.round(ld.length)}×${Math.round(ld.width)} mm). Widest thick enough: ${widest.tagId} (${Math.round(Math.min(wd.length, wd.width))} mm min face). On hand: ${onHand}.${thinNote}`;
   }
 
-  return `Could not fit on remaining ${piece.species} stock after other parts were placed.`;
+  const { fitTags, count } = formatFittingStockSummary(faceOk);
+  const nonFittingSameSpecies = matching.filter((b) => !faceOk.includes(b));
+  let rejectedNote = '';
+  if (nonFittingSameSpecies.length > 0) {
+    const sample = nonFittingSameSpecies
+      .slice(0, 4)
+      .map((b) => {
+        const d = resolvedBoardDims(b);
+        const thin = !canFitThickness(b, piece);
+        const why = thin
+          ? `too thin (${Math.round(d.thickness)}mm < ${needT}mm)`
+          : `too narrow/short (${Math.round(d.length)}×${Math.round(d.width)}mm < ${needL}×${needW}mm)`;
+        return `${b.tagId}: ${why}`;
+      })
+      .join('; ');
+    rejectedNote = ` Other ${piece.species} boards on hand cannot fit a ${needL}×${needW}${needT ? `×${needT}` : ''} mm piece (${sample}).`;
+  }
+
+  return (
+    `Only ${count} ${piece.species} board${count === 1 ? '' : 's'} on hand can fit ${needL}×${needW}${needT ? `×${needT}` : ''} mm: ${fitTags}, and ${count === 1 ? 'it is' : 'they are'} already filled by earlier ${piece.species} parts in this project.${rejectedNote} ` +
+    `Log another ${piece.species} board at least ${needL}×${needW}${needT ? `×${needT}` : ''} mm (or increase quantity on the wide board).`
+  );
 }
 
 /** Summarise every unallocated piece with a concrete stock reason. */
@@ -374,7 +477,7 @@ function orientations(piece: CutPiece): { cutLen: number; cutWid: number; rotate
 
 function canFitThickness(board: EngineBoard, piece: CutPiece): boolean {
   if (!piece.thickness || piece.thickness <= 0) return true;
-  return board.thickness >= piece.thickness - 0.1;
+  return resolvedBoardDims(board).thickness >= piece.thickness - 0.1;
 }
 
 function fitsInRect(rect: FreeRect, cutLen: number, cutWid: number): boolean {
@@ -382,8 +485,9 @@ function fitsInRect(rect: FreeRect, cutLen: number, cutWid: number): boolean {
 }
 
 function usableBoardRect(board: EngineBoard, endTrim: number): FreeRect | null {
-  const w = board.length - endTrim * 2;
-  const h = board.width - endTrim * 2;
+  const { length, width } = resolvedBoardDims(board);
+  const w = length - endTrim * 2;
+  const h = width - endTrim * 2;
   if (w <= 0 || h <= 0) return null;
   return { x: endTrim, y: endTrim, w, h };
 }
@@ -647,6 +751,7 @@ function makePartPlacement(
   stripKey: string
 ): Placement {
   const remLen = Math.max(0, boardLen - (posX + item.cutLen + kerf));
+  const dims = resolvedBoardDims(board);
   return {
     stepIndex: step,
     pieceId: item.piece.id,
@@ -658,9 +763,9 @@ function makePartPlacement(
     location: board.location || 'Workshop',
     opKind: 'crosscut',
     producesFinishedPart: true,
-    stockLen: board.length,
-    stockWid: board.width,
-    thickness: board.thickness,
+    stockLen: dims.length,
+    stockWid: dims.width,
+    thickness: dims.thickness,
     cutLen: item.cutLen,
     cutWid: item.cutWid,
     posX,
@@ -765,6 +870,7 @@ function packBoardByBlanks(
     if (!bestCol) break;
 
     const stripKey = `${board.tagId || board.id}-B${blankIndex}`;
+    const dims = resolvedBoardDims(board);
     for (const { item, posY } of bestCol.placed) {
       const remLen = Math.max(0, usable.w - (curX - usable.x + bestCol.blankLen + kerf));
       placements.push({
@@ -778,9 +884,9 @@ function packBoardByBlanks(
         location: board.location || 'Workshop',
         opKind: 'crosscut',
         producesFinishedPart: true,
-        stockLen: board.length,
-        stockWid: board.width,
-        thickness: board.thickness,
+        stockLen: dims.length,
+        stockWid: dims.width,
+        thickness: dims.thickness,
         cutLen: item.cutLen,
         cutWid: item.cutWid,
         posX: curX,
@@ -1104,6 +1210,7 @@ function expandStripRow(
       opKind: 'crosscut',
       producesFinishedPart: true,
       posX: p.posX,
+      // frameLen = length still in hand before this cut (UI "board in hand")
       frameX: stockLen - lenLeft,
       frameY: stripY,
       frameLen: lenLeft,
@@ -1114,6 +1221,7 @@ function expandStripRow(
       remWid: stripWid,
       edgeLen: 0,
       edgeWid: 0,
+      // Keep stockLen as original strip for nest geometry / OOB checks
       stockLen: p.stockLen,
       stockWid: p.stockWid,
     });
@@ -1525,27 +1633,46 @@ function nestAcrossBoards(
       const ob = isBoardOffcutLike(b) ? 0 : 1;
       if (oa !== ob) return oa - ob;
     }
-    const areaA = a.length * a.width;
-    const areaB = b.length * b.width;
+    const da = resolvedBoardDims(a);
+    const db = resolvedBoardDims(b);
+    const areaA = da.length * da.width;
+    const areaB = db.length * db.width;
     return boardOrder === 'large-first' ? areaB - areaA : areaA - areaB;
   });
 
   let queue = [...pieces];
   const placements: Placement[] = [];
+  const usedIds = new Set<string>();
 
-  for (const board of ordered) {
-    if (queue.length === 0) break;
-    if (boardRejectReason(board, queue, endTrim)) continue;
+  const runPass = (boardList: EngineBoard[], passPolicy: PackPolicy) => {
+    for (const board of boardList) {
+      if (queue.length === 0) break;
+      const bKey = board.id || board.tagId;
+      if (usedIds.has(bKey)) continue;
+      if (boardRejectReason(board, queue, endTrim)) continue;
 
-    const forBoard = queue.filter((p) => speciesMatches(p.species, board.species));
-    const deferred = queue.filter((p) => !speciesMatches(p.species, board.species));
-    if (forBoard.length === 0) continue;
+      const forBoard = queue.filter(
+        (p) => speciesMatches(p.species, board.species) && canFitThickness(board, p)
+      );
+      const deferred = queue.filter(
+        (p) => !(speciesMatches(p.species, board.species) && canFitThickness(board, p))
+      );
+      if (forBoard.length === 0) continue;
 
-    const packed = packBoard(board, forBoard, kerf, endTrim, placements.length + 1, policy);
-    if (packed.placements.length > 0) {
-      placements.push(...packed.placements);
+      const packed = packBoard(board, forBoard, kerf, endTrim, placements.length + 1, passPolicy);
+      if (packed.placements.length > 0) {
+        usedIds.add(bKey);
+        placements.push(...packed.placements);
+      }
+      queue = [...deferred, ...packed.remaining];
     }
-    queue = [...deferred, ...packed.remaining];
+  };
+
+  runPass(ordered, policy);
+
+  // Second pass: if any pieces remain, try unused boards with balanced strip packing
+  if (queue.length > 0) {
+    runPass(ordered, 'balanced');
   }
 
   return { placements, remaining: queue, policy, boardOrder, forcedShop };
@@ -1704,8 +1831,9 @@ export function createCuttingPlan(
 
   const boardMetaByTag: Record<string, { area: number; isOffcut: boolean }> = {};
   for (const b of candidates) {
+    const dims = resolvedBoardDims(b);
     boardMetaByTag[b.tagId || b.id] = {
-      area: b.length * b.width,
+      area: dims.length * dims.width,
       isOffcut: isBoardOffcutLike(b),
     };
   }

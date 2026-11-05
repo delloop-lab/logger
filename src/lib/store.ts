@@ -867,9 +867,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
       pauseReason: existing?.status === 'paused' ? existing.pauseReason : undefined,
       description: existing?.description,
       difficulty: existing?.difficulty,
-      cuttingPlan: activeCuttingPlan || existing?.cuttingPlan,
-      completedCutOps:
-        completedCutOps.length > 0 ? completedCutOps : existing?.completedCutOps || [],
+      cuttingPlan: activeCuttingPlan || undefined,
+      completedCutOps,
     };
 
     const nextSaved =
@@ -883,7 +882,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       activeProjectName: projectData.name,
       activeParts,
       activeKerfMm,
-      activeCuttingPlan: projectData.cuttingPlan || null,
+      activeCuttingPlan: activeCuttingPlan || null,
       cloudRevision: cloudRevision + 1,
     });
   },
@@ -924,8 +923,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       pauseReason: reason.trim() || 'Waiting for matching stock.',
       description: existing?.description,
       difficulty: existing?.difficulty,
-      cuttingPlan: activeCuttingPlan || existing?.cuttingPlan,
-      completedCutOps: completedOperations.filter((op) => op.startsWith(prefix)),
+      // Drop frozen nest — Resume must re-run against whatever stock is logged later
+      cuttingPlan: undefined,
+      completedCutOps: [],
     };
 
     const nextSaved =
@@ -933,12 +933,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
         ? savedProjects.map((p, i) => (i === existingIdx ? projectData : p))
         : [projectData, ...savedProjects];
 
+    const withoutProjOps = completedOperations.filter((op) => !op.startsWith(prefix));
+
     set({
       savedProjects: nextSaved,
       activeProjectName: 'New Project',
       activeParts: [],
       activeKerfMm: defaultKerfMm,
       activeCuttingPlan: null,
+      completedOperations: withoutProjOps,
       cloudRevision: cloudRevision + 1,
     });
     return { ok: true, name };
@@ -949,12 +952,27 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const proj = savedProjects.find((p) => p.id === id);
     if (!proj) return { ok: false, message: 'Project not found.' };
 
-    const nextSaved = savedProjects.map((p) =>
-      p.id === id ? { ...p, status: 'active' as const, pauseReason: undefined } : p
-    );
+    // Paused projects were waiting on stock. Drop the frozen plan/cut marks so Generate
+    // nests against current inventory (including boards logged while paused).
+    const wasPaused = proj.status === 'paused';
     const prefix = `${proj.name}-`;
     const withoutProj = completedOperations.filter((op) => !op.startsWith(prefix));
-    const restoredOps = [...withoutProj, ...(proj.completedCutOps || [])];
+    const restoredOps = wasPaused
+      ? withoutProj
+      : [...withoutProj, ...(proj.completedCutOps || [])];
+
+    const nextSaved = savedProjects.map((p) =>
+      p.id === id
+        ? {
+            ...p,
+            status: 'active' as const,
+            pauseReason: undefined,
+            ...(wasPaused
+              ? { cuttingPlan: undefined, completedCutOps: [] as string[] }
+              : {}),
+          }
+        : p
+    );
 
     set({
       savedProjects: nextSaved,
@@ -964,7 +982,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         proj.kerfMm != null && Number.isFinite(proj.kerfMm)
           ? Math.max(0, Number(proj.kerfMm))
           : defaultKerfMm,
-      activeCuttingPlan: proj.cuttingPlan || null,
+      activeCuttingPlan: wasPaused ? null : proj.cuttingPlan || null,
       completedOperations: restoredOps,
       cloudRevision: cloudRevision + 1,
     });
@@ -1118,9 +1136,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       pauseReason: existing?.status === 'paused' ? existing.pauseReason : undefined,
       description: existing?.description,
       difficulty: existing?.difficulty || 'Beginner',
-      cuttingPlan: activeCuttingPlan || existing?.cuttingPlan,
-      completedCutOps:
-        fromOps.length > 0 ? fromOps : existing?.completedCutOps || [],
+      // Workbench plan is source of truth — never resurrect a cleared nest from the library copy
+      cuttingPlan: activeCuttingPlan || undefined,
+      completedCutOps: fromOps,
     };
 
     // Skip bump if nothing meaningful changed (avoid save loops)
@@ -1129,7 +1147,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       existing.parts.length === projectData.parts.length &&
       partsFingerprint(existing.parts) === partsFingerprint(projectData.parts) &&
       (existing.completedCutOps?.length || 0) === (projectData.completedCutOps?.length || 0) &&
-      existing.difficulty === projectData.difficulty
+      existing.difficulty === projectData.difficulty &&
+      Boolean(existing.cuttingPlan?.placements?.length) ===
+        Boolean(projectData.cuttingPlan?.placements?.length)
     ) {
       return;
     }
@@ -1152,11 +1172,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const prefix = `${proj.name}-`;
     const withoutProj = state.completedOperations.filter((op) => !op.startsWith(prefix));
     const plan = proj.cuttingPlan || null;
-    // Keep confirmed placements even if fingerprint format drifted; refresh fingerprint to current parts
-    const activeCuttingPlan =
-      plan && (plan.placements?.length || 0) > 0
-        ? { ...plan, partsFingerprint: partsFingerprint(proj.parts) }
-        : plan;
+    const partsFp = partsFingerprint(proj.parts);
+    const planMatchesParts =
+      Boolean(plan?.placements?.length) &&
+      (!plan?.partsFingerprint || plan.partsFingerprint === partsFp);
+    // Drop nests that belong to an older cut list (species / size edits)
+    const activeCuttingPlan = planMatchesParts
+      ? { ...plan!, partsFingerprint: partsFp }
+      : null;
     set({
       activeProjectName: proj.name,
       activeParts: proj.parts,

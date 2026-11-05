@@ -9,6 +9,7 @@ import {
   speciesMatches,
   type CuttingStrategy,
 } from '@/lib/cutting-engine';
+import { expandLotsToStock } from '@/lib/inventory-lots';
 import {
   Scissors,
   Layers,
@@ -180,7 +181,6 @@ export default function CutListNesting() {
   };
 
   const handleResumeProject = (id: string, name: string) => {
-    const proj = savedProjects.find((p) => p.id === id);
     const result = store.resumeProject(id);
     if (!result.ok) {
       toast.error(result.message);
@@ -188,12 +188,10 @@ export default function CutListNesting() {
     }
     resetPartForm();
     setAllowThinStock(false);
-    const hasPlan = Boolean(proj?.cuttingPlan?.placements?.length);
-    setIsGenerated(hasPlan);
+    // Always re-nest after a stock pause so newly logged boards are included
+    setIsGenerated(false);
     toast.success(
-      hasPlan
-        ? `Resumed "${name}" with saved cutting plan.`
-        : `Resumed "${name}". Check stock, then generate again.`
+      `Resumed "${name}". Current stock (including anything logged while paused) is ready, generate sheets when you are.`
     );
   };
 
@@ -262,11 +260,21 @@ export default function CutListNesting() {
     };
   };
 
+  /** After cut-list edits, rebuild sheets immediately so stock is re-checked. */
+  const rebuildSheetsAfterPartsChange = (message: string) => {
+    store.clearActiveCuttingPlan();
+    setAllowThinStock(false);
+    const partsNow = useAppStore.getState().activeParts.length;
+    setIsGenerated(partsNow > 0);
+    toast.success(message);
+  };
+
   const handleAddPart = async (e: React.FormEvent) => {
     e.preventDefault();
     const part = parsePartForm();
     if (!part) return;
 
+    const shouldRebuild = isGenerated || Boolean(store.activeCuttingPlan);
     if (store.activeCuttingPlan) {
       const ok = await warnIfPlanExists(editingPartId ? 'Updating this part' : 'Adding a part');
       if (!ok) return;
@@ -274,13 +282,27 @@ export default function CutListNesting() {
 
     if (editingPartId) {
       store.updatePartInActiveProject(part);
-      toast.success(`Updated ${part.name}.`);
+      resetPartForm();
+      if (shouldRebuild) {
+        rebuildSheetsAfterPartsChange(
+          `Updated ${part.name}. Re-checked stock and rebuilt cut sheets.`
+        );
+      } else {
+        setIsGenerated(false);
+        toast.success(`Updated ${part.name}.`);
+      }
     } else {
       store.addPartToActiveProject(part);
-      toast.success(`Added ${part.name} to cut list!`);
+      resetPartForm();
+      if (shouldRebuild) {
+        rebuildSheetsAfterPartsChange(
+          `Added ${part.name}. Re-checked stock and rebuilt cut sheets.`
+        );
+      } else {
+        setIsGenerated(false);
+        toast.success(`Added ${part.name} to cut list!`);
+      }
     }
-    resetPartForm();
-    setIsGenerated(false);
   };
 
   const handleEditPart = (p: CutPart) => {
@@ -288,18 +310,23 @@ export default function CutListNesting() {
   };
 
   const handleDeletePart = async (id: string) => {
+    const shouldRebuild = isGenerated || Boolean(store.activeCuttingPlan);
     if (store.activeCuttingPlan) {
       const ok = await warnIfPlanExists('Removing a part');
       if (!ok) return;
     }
     store.removePartFromActiveProject(id);
     if (editingPartId === id) resetPartForm();
-    setIsGenerated(false);
-    toast.error('Removed part from cut list.');
+    if (shouldRebuild) {
+      rebuildSheetsAfterPartsChange('Removed part. Re-checked stock and rebuilt cut sheets.');
+    } else {
+      setIsGenerated(false);
+      toast.error('Removed part from cut list.');
+    }
   };
 
   const thicknessWarnings = (): string[] => {
-    const activeStock = boards.filter((b) => b.status === 'active');
+    const activeStock = expandLotsToStock(boards);
     const warnings: string[] = [];
 
     for (const part of activeParts) {
@@ -362,7 +389,8 @@ export default function CutListNesting() {
       }
     }
 
-    const activeStock = boards.filter((b) => b.status === 'active');
+    // Same expanded lots the nest uses (qty units, dimensions fallback, skip finished/waste)
+    const nestStock = expandLotsToStock(boards);
     const stockGaps = activeParts.flatMap((p) => {
       const piece = {
         id: p.id,
@@ -372,7 +400,7 @@ export default function CutListNesting() {
         width: p.width,
         thickness: p.thickness ?? 0,
       };
-      const reason = diagnoseUnallocated(piece, activeStock);
+      const reason = diagnoseUnallocated(piece, nestStock);
       const noStock =
         reason.startsWith('No ') ||
         reason.includes('too small') ||
@@ -512,7 +540,7 @@ export default function CutListNesting() {
                           type="button"
                           onClick={() => handleResumeProject(proj.id, proj.name)}
                           className="px-2.5 py-1 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 font-semibold rounded-lg flex items-center gap-1 cursor-pointer text-[11px]"
-                          title="Resume after you have logged the missing stock"
+                          title="Resume and nest against current stock (including boards logged while paused)"
                         >
                           <Play className="w-3 h-3" /> Resume
                         </button>

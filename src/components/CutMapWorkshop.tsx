@@ -37,7 +37,7 @@ function DimH({
 }) {
   const a = Math.min(x1, x2);
   const b = Math.max(x1, x2);
-  if (b - a < 8) return null;
+  if (b - a < 4) return null;
   return (
     <g stroke={INK} fill={INK} strokeWidth={1.1}>
       <line x1={a} y1={y - tick} x2={a} y2={y + tick} />
@@ -75,7 +75,7 @@ function DimV({
 }) {
   const a = Math.min(y1, y2);
   const b = Math.max(y1, y2);
-  if (b - a < 8) return null;
+  if (b - a < 4) return null;
   return (
     <g stroke={INK} fill={INK} strokeWidth={1.1}>
       <line x1={x - tick} y1={a} x2={x + tick} y2={a} />
@@ -169,6 +169,33 @@ function ShopDefs({ species }: { species: string }) {
   );
 }
 
+function LegendLines({
+  x,
+  y,
+  lines,
+}: {
+  x: number;
+  y: number;
+  lines: string[];
+}) {
+  return (
+    <g fontFamily="ui-monospace, monospace" fill={INK} fontWeight={700} fontSize={12}>
+      {lines.map((line, i) => (
+        <text key={i} x={x} y={y + i * 16}>
+          {line}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+/** Fit board face into a max box without forcing min pixel sizes that distort L×W. */
+function fitBoardScale(lenMm: number, widMm: number, maxW = 820, maxH = 320) {
+  const L = Math.max(lenMm, 1);
+  const W = Math.max(widMm, 1);
+  return Math.min(maxW / L, maxH / W);
+}
+
 function TitleBlock({
   x,
   y,
@@ -192,22 +219,23 @@ function TitleBlock({
   stepLabel: string;
   pullTag?: string;
 }) {
+  const blockW = Math.max(w, 560);
   const h = 64;
-  const col1 = w * 0.38;
-  const col2 = w * 0.32;
+  const col1 = blockW * 0.38;
+  const col2 = blockW * 0.32;
   return (
     <g fontFamily="ui-monospace, monospace" fill={INK}>
-      <rect x={x} y={y} width={w} height={h} fill={PAPER} stroke={INK} strokeWidth={1.6} />
+      <rect x={x} y={y} width={blockW} height={h} fill={PAPER} stroke={INK} strokeWidth={1.6} />
       <line x1={x + col1} y1={y} x2={x + col1} y2={y + h} stroke={INK} strokeWidth={1} />
       <line x1={x + col1 + col2} y1={y} x2={x + col1 + col2} y2={y + h} stroke={INK} strokeWidth={1} />
-      <line x1={x} y1={y + 20} x2={x + w} y2={y + 20} stroke={INK} strokeWidth={0.8} />
-      <line x1={x} y1={y + 42} x2={x + w} y2={y + 42} stroke={INK} strokeWidth={0.8} />
+      <line x1={x} y1={y + 20} x2={x + blockW} y2={y + 20} stroke={INK} strokeWidth={0.8} />
+      <line x1={x} y1={y + 42} x2={x + blockW} y2={y + 42} stroke={INK} strokeWidth={0.8} />
 
       <text x={x + 10} y={y + 14} fontSize={9} fill={FAINT}>
         PROJECT
       </text>
       <text x={x + 10} y={y + 36} fontSize={13} fontWeight={700}>
-        {(projectName || 'unnamed').slice(0, 28)}
+        {(projectName || 'unnamed').slice(0, 32)}
       </text>
       <text x={x + 10} y={y + 56} fontSize={11}>
         {stepLabel}
@@ -217,10 +245,10 @@ function TitleBlock({
         STOCK / PULL
       </text>
       <text x={x + col1 + 10} y={y + 36} fontSize={12} fontWeight={700}>
-        {(pullTag || boardTag).slice(0, 24)}
+        {(pullTag || boardTag).slice(0, 36)}
       </text>
       <text x={x + col1 + 10} y={y + 56} fontSize={11}>
-        {species.slice(0, 26)}
+        {species.slice(0, 32)}
       </text>
 
       <text x={x + col1 + col2 + 10} y={y + 14} fontSize={9} fill={FAINT}>
@@ -250,11 +278,13 @@ function SheetFrame({
   species: string;
 }) {
   const m = 14;
+  // Size from viewBox only — forced min-height letterboxed long/narrow boards into ribbons
   return (
     <div className="shop-drawing w-full overflow-x-auto">
       <svg
         viewBox={`0 0 ${svgW} ${svgH}`}
-        className="w-full max-w-none h-auto min-h-[420px] md:min-h-[560px] font-mono"
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full max-w-none h-auto font-mono"
         style={{ background: PAPER }}
       >
         <ShopDefs species={species} />
@@ -310,20 +340,27 @@ export default function CutMapWorkshop({
   const isBlank = step.opKind === 'blank';
   const stripKey = step.stripKey;
 
+  // Group every crosscut on this rip channel (same stripKey, or same Y + width)
   const stripParts = allOnBoard
-    .filter(
-      (s) =>
-        s.opKind === 'crosscut' &&
-        (stripKey ? s.stripKey === stripKey : Math.abs(s.posY - step.posY) < 0.51)
-    )
+    .filter((s) => {
+      if (s.opKind !== 'crosscut') return false;
+      if (stripKey && s.stripKey && s.stripKey === stripKey) return true;
+      return (
+        Math.abs(s.posY - step.posY) < 0.51 &&
+        Math.abs(s.cutWid - step.cutWid) < 0.51
+      );
+    })
     .sort((a, b) => a.posX - b.posX || a.stepIndex - b.stepIndex);
 
+  // Never fall back to an unrelated rip on a multi-strip board
   const openingRip =
     allOnBoard.find(
       (s) =>
         s.opKind === 'rip' &&
-        ((stripKey && s.stripKey === stripKey) || Math.abs(s.posY - step.posY) < 0.51)
-    ) || allOnBoard.find((s) => s.opKind === 'rip');
+        (stripKey
+          ? s.stripKey === stripKey
+          : Math.abs(s.posY - step.posY) < 0.51)
+    ) || null;
 
   const stripWid = isRip
     ? step.cutWid
@@ -345,32 +382,37 @@ export default function CutMapWorkshop({
         : step.stockLen;
   const kerf = step.kerf;
 
-  // Parked odd piece from the rip, same length as the piece being ripped
-  const asideLen =
-    Number(openingRip?.edgeLen) > 0.5
-      ? Number(openingRip!.edgeLen)
-      : isRip
-        ? stripLen
-        : step.stockLen;
+  // Parked odd piece from the rip — only use real edge dims (no fake stripLen fallback)
+  const asideLen = Number(openingRip?.edgeLen) > 0.5 ? Number(openingRip!.edgeLen) : 0;
   const asideWid =
     Number(openingRip?.edgeWid) > 0.5
       ? Number(openingRip!.edgeWid)
-      : Math.max(0, step.stockWid - stripY - stripWid - kerf);
+      : isRip
+        ? Math.max(0, Number(step.edgeWid) || 0)
+        : Math.max(0, step.stockWid - stripY - stripWid - kerf);
 
   // ---------- BLANK (crosscut short blank, leave long continuous board) ----------
   if (isBlank) {
     const mx = 110;
     const my = 88;
-    const boardLen = Number(step.frameLen) > 0.5 ? Number(step.frameLen) : step.stockLen;
-    const scale = Math.min(820 / boardLen, 280 / Math.max(step.stockWid, 1));
+    // Full remaining board in hand = blank + kerf + keep-whole (never blank length alone)
+    const blankLen = Math.max(0, step.cutLen);
+    const remLen = Math.max(0, step.remLen);
+    const boardLen = Math.max(
+      blankLen + step.kerf + remLen,
+      Number(step.frameLen) > 0.5 ? Number(step.frameLen) : 0,
+      step.stockLen
+    );
+    const boardWid = Math.max(step.stockWid, step.cutWid, 1);
+    const scale = fitBoardScale(boardLen, boardWid, 820, 300);
     const bw = boardLen * scale;
-    const bh = Math.max(step.stockWid * scale, 72);
-    const blankW = step.cutLen * scale;
-    const remW = Math.max(0, step.remLen) * scale;
-    const kerfPx = Math.max(4, step.kerf * scale);
-    const legendY = my + bh + 36;
-    const titleY = legendY + 32;
-    const svgW = mx + bw + 100;
+    const bh = boardWid * scale;
+    const blankW = blankLen * scale;
+    const remW = remLen * scale;
+    const kerfPx = Math.max(2, step.kerf * scale);
+    const legendY = my + bh + 44;
+    const titleY = legendY + 40;
+    const svgW = Math.max(mx + bw + 100, mx + 560 + 40);
     const svgH = titleY + 78;
 
     return (
@@ -391,7 +433,7 @@ export default function CutMapWorkshop({
           strokeWidth={2.4}
         />
         <rect x={mx + blankW} y={my} width={kerfPx} height={bh} fill={INK} />
-        {remW > 2 && (
+        {remW > 1 && (
           <rect
             x={mx + blankW + kerfPx}
             y={my}
@@ -403,21 +445,25 @@ export default function CutMapWorkshop({
             strokeDasharray="7 4"
           />
         )}
-        <DimH x1={mx} x2={mx + blankW} y={my - 28} label={`BLANK ${formatDim(step.cutLen, unitSystem)}`} />
-        {remW > 2 && (
+        <DimH x1={mx} x2={mx + blankW} y={my - 28} label={`BLANK ${formatDim(blankLen, unitSystem)}`} />
+        {remW > 1 && (
           <DimH
             x1={mx + blankW + kerfPx}
             x2={mx + blankW + kerfPx + remW}
             y={my + bh + 26}
-            label={`KEEP WHOLE ${formatDim(step.remLen, unitSystem)}`}
+            label={`KEEP WHOLE ${formatDim(remLen, unitSystem)}`}
           />
         )}
-        <DimV y1={my} y2={my + bh} x={mx - 34} label={formatDim(step.stockWid, unitSystem)} />
-        <Callout cx={mx + Math.min(blankW / 2, 48)} cy={my - 34} letter="A" />
-        <text x={mx} y={legendY} fontSize={13} fontFamily="ui-monospace, monospace" fill={INK} fontWeight={700}>
-          A = short blank to rip/crosscut, dashed = one continuous offcut (do not fragment)
-          {isCompleted ? ', COMPLETE' : ''}
-        </text>
+        <DimV y1={my} y2={my + bh} x={mx - 34} label={formatDim(boardWid, unitSystem)} />
+        <Callout cx={mx + Math.min(Math.max(blankW / 2, 18), 48)} cy={my - 34} letter="A" />
+        <LegendLines
+          x={mx}
+          y={legendY}
+          lines={[
+            `A = short blank to rip next (${formatDim(blankLen, unitSystem)} × ${formatDim(boardWid, unitSystem)})`,
+            `Dashed = one continuous offcut — do not fragment${isCompleted ? ' · COMPLETE' : ''}`,
+          ]}
+        />
         <TitleBlock
           x={mx}
           y={titleY}
@@ -425,7 +471,7 @@ export default function CutMapWorkshop({
           projectName={projectName}
           boardTag={step.boardTag}
           species={step.species}
-          dims={`${formatDim(step.cutLen, unitSystem)} × ${formatDim(step.cutWid, unitSystem)}`}
+          dims={`${formatDim(blankLen, unitSystem)} × ${formatDim(boardWid, unitSystem)}`}
           op="BLANK CROSSCUT"
           stepLabel={stepLabel || `Step ${step.stepIndex}`}
           pullTag={pullTag}
@@ -436,19 +482,23 @@ export default function CutMapWorkshop({
 
   // ---------- RIP ----------
   if (isRip) {
-    const mx = 110;
+    const mx = 120;
     const my = 88;
     const ripLen = stripLen;
-    const scale = Math.min(820 / Math.max(ripLen, 1), 360 / Math.max(step.stockWid, 1));
+    const ripAsideLen = Number(step.edgeLen) > 0.5 ? Number(step.edgeLen) : asideLen;
+    const ripAsideWid = Number(step.edgeWid) > 0.5 ? Number(step.edgeWid) : asideWid;
+    // Face in hand for this rip (blank or full stock width)
+    const faceWid = Math.max(step.stockWid, stripWid + kerf + Math.max(ripAsideWid, 0), 1);
+    const scale = fitBoardScale(ripLen, faceWid, 820, 340);
     const bw = ripLen * scale;
-    const bh = Math.max(step.stockWid * scale, 100);
-    const stripH = Math.max(stripWid * scale, 36);
-    const kerfPx = Math.max(4, kerf * scale);
-    const asideH = Math.max(asideWid * scale, asideWid > 0.5 ? 44 : 0);
-    const stripTop = my + stripY * scale;
-    const legendY = my + bh + 36;
-    const titleY = legendY + 32;
-    const svgW = mx + bw + 110;
+    const bh = faceWid * scale;
+    const stripH = stripWid * scale;
+    const kerfPx = Math.max(2, kerf * scale);
+    const asideH = ripAsideWid > 0.5 ? ripAsideWid * scale : 0;
+    const stripTop = my + Math.min(stripY, Math.max(0, faceWid - stripWid - kerf - ripAsideWid)) * scale;
+    const legendY = my + bh + 48;
+    const titleY = legendY + 48;
+    const svgW = Math.max(mx + bw + 120, mx + 560 + 40);
     const svgH = titleY + 78;
     // Short piece in hand vs a long nest board → ripped from a blank, not full stock
     const isShortBlankRip =
@@ -464,20 +514,20 @@ export default function CutMapWorkshop({
       >
         <rect x={mx} y={my} width={bw} height={bh} fill="url(#shop-grain)" stroke={INK} strokeWidth={2.2} />
 
-        {/* A, keep strip */}
+        {/* A, keep strip / finished part */}
         <rect
           x={mx}
           y={stripTop}
           width={bw}
           height={stripH}
-          fill="url(#shop-grain)"
+          fill={step.producesFinishedPart ? '#fef3c7' : 'url(#shop-grain)'}
           stroke={INK}
           strokeWidth={2.2}
         />
         {/* Kerf */}
         <rect x={mx} y={stripTop + stripH} width={bw} height={kerfPx} fill={INK} />
 
-        {/* B, set aside (light fill + dashed, NOT hatch) */}
+        {/* B, set aside (light fill + dashed, NOT hatch) — true width ratio */}
         {asideH > 1 && (
           <rect
             x={mx}
@@ -492,20 +542,20 @@ export default function CutMapWorkshop({
         )}
 
         <DimH x1={mx} x2={mx + bw} y={my - 28} label={formatDim(ripLen, unitSystem)} />
-        <DimV y1={my} y2={my + bh} x={mx + bw + 34} label={formatDim(step.stockWid, unitSystem)} />
-        <DimV y1={stripTop} y2={stripTop + stripH} x={mx - 34} label={formatDim(stripWid, unitSystem)} />
+        <DimV y1={my} y2={my + bh} x={mx + bw + 34} label={formatDim(faceWid, unitSystem)} />
+        <DimV y1={stripTop} y2={stripTop + stripH} x={mx - 40} label={formatDim(stripWid, unitSystem)} />
         {asideH > 1 && (
           <DimV
             y1={stripTop + stripH + kerfPx}
             y2={stripTop + stripH + kerfPx + asideH}
             x={mx + bw + 68}
-            label={formatDim(asideWid, unitSystem)}
+            label={formatDim(ripAsideWid, unitSystem)}
           />
         )}
 
-        <Callout cx={mx - 58} cy={stripTop + stripH / 2} letter="A" />
+        <Callout cx={mx - 62} cy={stripTop + stripH / 2} letter="A" />
         <line
-          x1={mx - 44}
+          x1={mx - 48}
           y1={stripTop + stripH / 2}
           x2={mx - 2}
           y2={stripTop + stripH / 2}
@@ -514,9 +564,9 @@ export default function CutMapWorkshop({
         />
         {asideH > 1 && (
           <>
-            <Callout cx={mx - 58} cy={stripTop + stripH + kerfPx + asideH / 2} letter="B" />
+            <Callout cx={mx - 62} cy={stripTop + stripH + kerfPx + asideH / 2} letter="B" />
             <line
-              x1={mx - 44}
+              x1={mx - 48}
               y1={stripTop + stripH + kerfPx + asideH / 2}
               x2={mx - 2}
               y2={stripTop + stripH + kerfPx + asideH / 2}
@@ -526,13 +576,18 @@ export default function CutMapWorkshop({
           </>
         )}
 
-        <text x={mx} y={legendY} fontSize={13} fontFamily="ui-monospace, monospace" fill={INK} fontWeight={700}>
-          A = {step.producesFinishedPart ? `FINISHED PART (${step.partName})` : 'KEEP strip'}{' '}
-          {formatDim(ripLen, unitSystem)} × {formatDim(stripWid, unitSystem)}, B =
-          SET ASIDE {formatDim(asideLen, unitSystem)} × {formatDim(asideWid, unitSystem)}, kerf{' '}
-          {formatDim(kerf, unitSystem)}
-          {isCompleted ? ', COMPLETE' : ''}
-        </text>
+        <LegendLines
+          x={mx}
+          y={legendY}
+          lines={[
+            `A = ${
+              step.producesFinishedPart ? `FINISHED (${step.partName})` : 'KEEP strip'
+            } ${formatDim(ripLen, unitSystem)} × ${formatDim(stripWid, unitSystem)}`,
+            asideH > 1
+              ? `B = SET ASIDE ${formatDim(ripAsideLen > 0.5 ? ripAsideLen : ripLen, unitSystem)} × ${formatDim(ripAsideWid, unitSystem)}, kerf ${formatDim(kerf, unitSystem)}${isCompleted ? ' · COMPLETE' : ''}`
+              : `Kerf ${formatDim(kerf, unitSystem)}${isCompleted ? ' · COMPLETE' : ''}`,
+          ]}
+        />
 
         <TitleBlock
           x={mx}
@@ -541,8 +596,12 @@ export default function CutMapWorkshop({
           projectName={projectName}
           boardTag={step.boardTag}
           species={step.species}
-          dims={`${formatDim(ripLen, unitSystem)} × ${formatDim(step.stockWid, unitSystem)} × ${formatDim(step.thickness, unitSystem)}`}
-          op={`RIP → ${formatDim(stripWid, unitSystem)} strip`}
+          dims={`${formatDim(ripLen, unitSystem)} × ${formatDim(stripWid, unitSystem)} × ${formatDim(step.thickness, unitSystem)}`}
+          op={
+            step.producesFinishedPart
+              ? `RIP → FINISHED ${formatDim(stripWid, unitSystem)}`
+              : `RIP → ${formatDim(stripWid, unitSystem)} strip`
+          }
           stepLabel={stepLabel || `Step ${step.stepIndex}`}
           pullTag={pullTag}
         />
@@ -551,39 +610,55 @@ export default function CutMapWorkshop({
   }
 
   // ---------- CROSSCUT ----------
-  const stripOriginX = stripParts[0]?.posX ?? step.posX;
-  const alreadyCutLen = Math.min(stripLen, Math.max(0, step.posX - stripOriginX));
-  const handLen = Math.max(step.cutLen, stripLen - alreadyCutLen);
+  const priorOnStrip = stripParts.filter((s) => s.stepIndex < step.stepIndex);
   const laterOnStrip = stripParts.filter((s) => s.stepIndex > step.stepIndex);
-  const lastOnStrip = stripParts[stripParts.length - 1];
-  const endWaste =
-    lastOnStrip != null
-      ? Math.max(0, stripLen - (lastOnStrip.posX - stripOriginX + lastOnStrip.cutLen))
-      : Math.max(0, step.remLen);
-
   const cutOrd = Math.max(
     0,
     stripParts.findIndex((s) => s.stepIndex === step.stepIndex)
   );
   const letter = cutMark(cutOrd);
 
+  // Length physically in hand (min of stock/frame so old plans with full stockLen still work)
+  const stockL = Number(step.stockLen) || 0;
+  const frameL = Number(step.frameLen) || 0;
+  const inHandLen = Math.max(
+    step.cutLen,
+    frameL > 0.5 && stockL > 0.5
+      ? Math.min(frameL, stockL)
+      : frameL > 0.5
+        ? frameL
+        : stockL > 0.5
+          ? stockL
+          : stripLen
+  );
+  const tipLeft = Math.max(0, Number(step.remLen) > 0.5 ? Number(step.remLen) : inHandLen - step.cutLen - kerf);
+  // Prior removals only for first-of-strip nest view; REM pulls already exclude them
+  const showPriorRemoved = priorOnStrip.length > 0 && Math.abs(inHandLen - stripLen) < 1;
+  const stripOriginX = Math.min(...stripParts.map((s) => s.posX), step.posX);
+  const alreadyCutLen = showPriorRemoved
+    ? Math.min(stripLen, Math.max(0, step.posX - stripOriginX))
+    : 0;
+  const drawLen = showPriorRemoved ? stripLen : inHandLen;
+  const handLen = showPriorRemoved ? Math.max(step.cutLen, stripLen - alreadyCutLen) : inHandLen;
+
   const mx = 110;
   const my = 96;
-  const scale = Math.min(860 / Math.max(stripLen, 1), 200 / Math.max(stripWid, 1));
-  const fullTrackW = stripLen * scale;
+  const scale = fitBoardScale(drawLen, stripWid, 860, 220);
+  const fullTrackW = drawLen * scale;
   const goneW = alreadyCutLen * scale;
   const handW = Math.max(0, handLen * scale);
   const handX = mx + goneW;
-  const bh = Math.max(stripWid * scale, 56);
-  const kerfPx = Math.max(4, kerf * scale);
+  const bh = Math.max(stripWid * scale, 28);
+  const kerfPx = Math.max(2, kerf * scale);
   const cutW = Math.min(step.cutLen * scale, Math.max(handW, step.cutLen * scale));
+  const tipW = Math.max(0, tipLeft * scale);
 
   // Set-aside block BELOW the strip, full width, no side overlap
   const asideBlockY = my + bh + 56;
   const asideBlockH = 88;
   const legendY = asideBlockY + asideBlockH + 28;
-  const titleY = legendY + 28;
-  const svgW = mx + fullTrackW + 100;
+  const titleY = legendY + 36;
+  const svgW = Math.max(mx + fullTrackW + 100, mx + 560 + 40);
   const svgH = titleY + 78;
 
   return (
@@ -593,7 +668,7 @@ export default function CutMapWorkshop({
       title="SHOP DRAWING, CROSSCUT (STRIP IN HAND)"
       species={step.species}
     >
-      {/* Ghost original strip length */}
+      {/* Ghost / outline of the piece being drawn */}
       <rect
         x={mx}
         y={my}
@@ -620,12 +695,12 @@ export default function CutMapWorkshop({
             x1={mx}
             x2={mx + goneW}
             y={my - 30}
-            label={`REMOVED ${formatDim(alreadyCutLen, unitSystem)}`}
+            label={`ALREADY CUT OFF ${formatDim(alreadyCutLen, unitSystem)}`}
           />
         </>
       )}
 
-      {/* Remaining strip still in hand (to the right of removed) */}
+      {/* Remaining strip still in hand */}
       {handW > 2 && (
         <rect
           x={handX}
@@ -639,8 +714,9 @@ export default function CutMapWorkshop({
       )}
 
       {laterOnStrip.map((p) => {
-        const lx = p.posX - step.posX;
-        if (lx < 0.5) return null;
+        const lx = showPriorRemoved ? p.posX - step.posX : p.cutLen; // approx
+        if (showPriorRemoved && lx < 0.5) return null;
+        if (!showPriorRemoved) return null;
         return (
           <rect
             key={`later-${p.stepIndex}`}
@@ -656,7 +732,7 @@ export default function CutMapWorkshop({
         );
       })}
 
-      {/* This crosscut: light fill + heavy outline + letter so it cannot vanish */}
+      {/* This crosscut */}
       {cutW > 2 && (
         <>
           <rect
@@ -702,12 +778,12 @@ export default function CutMapWorkshop({
         />
       )}
       <DimV y1={my} y2={my + bh} x={mx - 36} label={formatDim(stripWid, unitSystem)} />
-      {endWaste > 2 && handW > 2 && (
+      {tipW > 2 && tipLeft > 2 && (
         <DimH
-          x1={handX + handW - endWaste * scale}
-          x2={handX + handW}
+          x1={handX + cutW + kerfPx}
+          x2={handX + cutW + kerfPx + tipW}
           y={my + bh + 48}
-          label={`STRIP TIP LEFT ${formatDim(endWaste, unitSystem)}`}
+          label={`STRIP TIP LEFT ${formatDim(tipLeft, unitSystem)}`}
         />
       )}
 
@@ -767,11 +843,13 @@ export default function CutMapWorkshop({
         </text>
       )}
 
-      <text x={mx} y={legendY} fontSize={13} fontFamily="ui-monospace, monospace" fill={INK} fontWeight={700}>
-        Hatch = already cut off strip, Cut {letter} = this crosscut, dark gap = kerf{' '}
-        {formatDim(kerf, unitSystem)}
-        {isCompleted ? ', COMPLETE' : ''}
-      </text>
+      <LegendLines
+        x={mx}
+        y={legendY}
+        lines={[
+          `Hatch = already cut off strip · Cut ${letter} = this crosscut · dark gap = kerf ${formatDim(kerf, unitSystem)}${isCompleted ? ' · COMPLETE' : ''}`,
+        ]}
+      />
 
       <TitleBlock
         x={mx}
