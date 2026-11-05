@@ -144,6 +144,7 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
   const markProjectCompleted = useAppStore((s) => s.markProjectCompleted);
   const syncActiveProjectToLibrary = useAppStore((s) => s.syncActiveProjectToLibrary);
   const openProjectWithCuttingSheets = useAppStore((s) => s.openProjectWithCuttingSheets);
+  const restoreRecoveredProjects = useAppStore((s) => s.restoreRecoveredProjects);
   const defaultKerfMm = useAppStore((s) => s.defaultKerfMm);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -154,6 +155,15 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
   React.useEffect(() => {
     syncActiveProjectToLibrary();
   }, [syncActiveProjectToLibrary, savedProjects.length, completedOperations.length]);
+
+  // After a cloud wipe, put the known workshop projects back once
+  React.useEffect(() => {
+    if (savedProjects.length > 0) return;
+    const result = restoreRecoveredProjects();
+    if (result.added > 0) {
+      toast.success(`Restored ${result.added} workshop projects.`);
+    }
+  }, [savedProjects.length, restoreRecoveredProjects]);
 
   const activeBoards = boards.filter((b) => b.status === 'active');
 
@@ -299,9 +309,27 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
         </h3>
 
         {assessedProjects.length === 0 ? (
-          <div className="bg-[#1e2228] border border-dashed border-gray-700 p-8 rounded-2xl text-center text-sm text-gray-400">
-            No saved projects yet. Create one under Projects &amp; Cuts (name it, add parts, Save
-            project), then it shows up here with skill level and description.
+          <div className="bg-[#1e2228] border border-dashed border-gray-700 p-8 rounded-2xl text-center text-sm text-gray-400 space-y-4">
+            <p>
+              No saved projects yet. Create one under Projects &amp; Cuts (name it, add parts, Save
+              project), then it shows up here with skill level and description.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const result = restoreRecoveredProjects();
+                if (result.added === 0) {
+                  toast.success('Workshop projects are already in the library.');
+                  return;
+                }
+                toast.success(
+                  `Restored ${result.added} project${result.added === 1 ? '' : 's'} (Drinks Tray, Cutting Board, Simple Test, Tech-Drawing Board).`
+                );
+              }}
+              className="mx-auto px-4 py-2.5 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white cursor-pointer"
+            >
+              Restore workshop projects
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -336,13 +364,19 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
                       )}
                       <div className="flex items-center gap-1.5">
                         {isCompleted && (
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg border bg-emerald-950/40 text-emerald-300 border-emerald-800/50">
+                          <span
+                            className="text-[10px] font-bold px-2 py-1 rounded-lg border bg-emerald-950/40 text-emerald-300 border-emerald-800/50"
+                            title="You marked this as a finished build"
+                          >
                             COMPLETED
                           </span>
                         )}
                         {!isCompleted && confirmed && (
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg border bg-sky-950/40 text-sky-300 border-sky-800/50">
-                            CONFIRMED
+                          <span
+                            className="text-[10px] font-bold px-2 py-1 rounded-lg border bg-sky-950/40 text-sky-300 border-sky-800/50"
+                            title="Cutting plan or confirmed shop cuts exist — not the same as marking the build complete"
+                          >
+                            CUTS IN PROGRESS
                           </span>
                         )}
                         <span

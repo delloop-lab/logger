@@ -5,6 +5,7 @@ import {
   type Placement,
 } from '@/lib/cutting-engine';
 import { createDemoWorkspace } from '@/lib/demo-workspace';
+import { buildRecoveredWorkshopProjects } from '@/lib/recovered-projects';
 import { escapeTag, resolveUnitsIssued } from '@/lib/inventory-lots';
 import {
   DEFAULT_LUMBER_TYPES,
@@ -196,10 +197,21 @@ interface AppState extends WorkspaceData {
   /** Bumped on every workshop mutation so CloudSync can persist to Supabase */
   cloudRevision: number;
   /**
+   * When true, the next cloud save may wipe boards/projects if local lists are empty
+   * (only set by intentional Settings → wipe).
+   */
+  pendingCloudEmptyWipe: boolean;
+  /** Board IDs the user explicitly deleted — cloud removes only these. */
+  pendingDeletedBoardIds: string[];
+  /** Project IDs the user explicitly deleted — cloud removes only these. */
+  pendingDeletedProjectIds: string[];
+  /**
    * UI signal: Projects & Cuts should expand saved cutting diagrams
    * (e.g. opened a confirmed build from What Can I Build).
    */
   revealSavedCuttingSheets: boolean;
+  clearPendingCloudEmptyWipe: () => void;
+  clearPendingDeletes: () => void;
 
   setCloudUserId: (userId: string | null) => void;
   setCloudReady: (ready: boolean) => void;
@@ -292,6 +304,11 @@ interface AppState extends WorkspaceData {
   deleteProject: (id: string) => void;
   startNewProject: () => void;
   resetWorkshopData: () => void;
+  /**
+   * Merge recovered workshop projects (after cloud wipe) into the library.
+   * Skips names that already exist. Bumps cloudRevision so CloudSync persists.
+   */
+  restoreRecoveredProjects: () => { ok: true; added: number; skipped: number };
 }
 
 export const DEFAULT_LOCATIONS = [
@@ -407,6 +424,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
   demoPreview: false,
   cutHistory: [],
   cloudRevision: 0,
+  pendingCloudEmptyWipe: false,
+  pendingDeletedBoardIds: [],
+  pendingDeletedProjectIds: [],
   revealSavedCuttingSheets: false,
 
   setCloudUserId: (userId) => set({ cloudUserId: userId }),
@@ -414,9 +434,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
   setCloudSaving: (saving) => set({ cloudSaving: saving }),
   setAuthChecked: (checked) => set({ authChecked: checked }),
 
-  hydrateFromCloud: (data) =>
+  hydrateFromCloud: (data) => {
+    // Cloud wipe left an empty library — seed recovered workshop projects and
+    // bump revision so CloudSync writes them back with the fixed upsert path.
+    const cloudProjects = data.savedProjects || [];
+    const recovered =
+      cloudProjects.length === 0 ? buildRecoveredWorkshopProjects() : [];
+    const savedProjects = cloudProjects.length > 0 ? cloudProjects : recovered;
     set({
       ...data,
+      savedProjects,
       lumberTypes: mergeLumberTypesWithStock(
         data.lumberTypes,
         (data.boards || []).map((b) => b.species)
@@ -427,8 +454,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       cloudReady: true,
       demoPreview: false,
       cutHistory: [],
-      cloudRevision: 0,
-    }),
+      cloudRevision: recovered.length > 0 ? 1 : 0,
+    });
+  },
 
   clearWorkshopMemory: () =>
     set({
@@ -459,6 +487,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   bumpCloudRevision: () => set((s) => ({ cloudRevision: s.cloudRevision + 1 })),
+  clearPendingCloudEmptyWipe: () => set({ pendingCloudEmptyWipe: false }),
+  clearPendingDeletes: () => set({ pendingDeletedBoardIds: [], pendingDeletedProjectIds: [] }),
 
   addBoard: (board) =>
     set((state) => ({
@@ -469,6 +499,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
   removeBoard: (id) =>
     set((state) => ({
       boards: state.boards.filter((b) => b.id !== id),
+      pendingDeletedBoardIds: state.pendingDeletedBoardIds.includes(id)
+        ? state.pendingDeletedBoardIds
+        : [...state.pendingDeletedBoardIds, id],
       cloudRevision: state.cloudRevision + 1,
     })),
 
@@ -1148,6 +1181,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
       partsFingerprint(existing.parts) === partsFingerprint(projectData.parts) &&
       (existing.completedCutOps?.length || 0) === (projectData.completedCutOps?.length || 0) &&
       existing.difficulty === projectData.difficulty &&
+      (existing.description || '') === (projectData.description || '') &&
+      existing.status === projectData.status &&
       Boolean(existing.cuttingPlan?.placements?.length) ===
         Boolean(projectData.cuttingPlan?.placements?.length)
     ) {
@@ -1216,6 +1251,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
   deleteProject: (id) => {
     set((state) => ({
       savedProjects: state.savedProjects.filter((p) => p.id !== id),
+      pendingDeletedProjectIds: state.pendingDeletedProjectIds.includes(id)
+        ? state.pendingDeletedProjectIds
+        : [...state.pendingDeletedProjectIds, id],
       cloudRevision: state.cloudRevision + 1,
     }));
   },
@@ -1249,6 +1287,26 @@ export const useAppStore = create<AppState>()((set, get) => ({
       cloudReady: state.cloudReady,
       cloudSaving: false,
       cutHistory: [],
+      pendingCloudEmptyWipe: true,
       cloudRevision: state.cloudRevision + 1,
     })),
+
+  restoreRecoveredProjects: () => {
+    const recovered = buildRecoveredWorkshopProjects();
+    const { savedProjects, cloudRevision } = get();
+    const existingNames = new Set(savedProjects.map((p) => projectNameKey(p.name)));
+    const existingIds = new Set(savedProjects.map((p) => String(p.id)));
+    const toAdd = recovered.filter(
+      (p) => !existingNames.has(projectNameKey(p.name)) && !existingIds.has(String(p.id))
+    );
+    const skipped = recovered.length - toAdd.length;
+    if (toAdd.length === 0) {
+      return { ok: true as const, added: 0, skipped };
+    }
+    set({
+      savedProjects: [...toAdd, ...savedProjects],
+      cloudRevision: cloudRevision + 1,
+    });
+    return { ok: true as const, added: toAdd.length, skipped };
+  },
 }));

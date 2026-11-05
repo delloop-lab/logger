@@ -15,7 +15,7 @@ import {
   AlertTriangle,
   Printer,
 } from 'lucide-react';
-import { toast } from '@/lib/notify';
+import { notify, toast } from '@/lib/notify';
 import { displayToMm, formatDimsLWT, mmToDisplay, unitLabel } from '@/lib/units';
 import { DEFECT_OPTIONS, formatDefectsList, type DefectType } from '@/lib/defects';
 import AppModal from '@/components/AppModal';
@@ -176,7 +176,14 @@ export default function InventoryList() {
     return 0;
   });
 
-  const handleDelete = (id: string, tagId: string) => {
+  const handleDelete = async (id: string, tagId: string) => {
+    const ok = await notify.confirm({
+      title: 'Remove board from inventory?',
+      message: `Remove ${tagId} from inventory? This cannot be undone.`,
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
     removeBoard(id);
     toast.error(`Removed board ${tagId} from inventory.`);
   };

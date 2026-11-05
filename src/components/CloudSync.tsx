@@ -28,6 +28,8 @@ export default function CloudSync() {
   const loadDemoPreview = useAppStore((s) => s.loadDemoPreview);
   const skipSaveRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveInFlightRef = useRef(false);
+  const pendingSaveRef = useRef(false);
 
   useEffect(() => {
     clearLegacyLocalStorage();
@@ -108,25 +110,53 @@ export default function CloudSync() {
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      const state = useAppStore.getState();
-      if (!state.cloudUserId) return;
-      setCloudSaving(true);
-      const result = await saveWorkspace(state.cloudUserId, {
-        boards: state.boards,
-        storageLocations: state.storageLocations,
-        lumberTypes: state.lumberTypes,
-        savedProjects: state.savedProjects,
-        activeProjectName: state.activeProjectName,
-        activeParts: state.activeParts,
-        completedOperations: state.completedOperations,
-        offcutSettings: state.offcutSettings,
-        unitSystem: state.unitSystem,
-        defaultKerfMm: state.defaultKerfMm,
-        activeKerfMm: state.activeKerfMm,
-        activeCuttingPlan: state.activeCuttingPlan,
-      });
-      setCloudSaving(false);
-      if (!result.ok) toast.error(`Cloud save failed: ${result.message}`);
+      const runSave = async () => {
+        const state = useAppStore.getState();
+        if (!state.cloudUserId || state.demoPreview) return;
+        if (saveInFlightRef.current) {
+          pendingSaveRef.current = true;
+          return;
+        }
+        saveInFlightRef.current = true;
+        pendingSaveRef.current = false;
+        setCloudSaving(true);
+        const allowEmptyWipe = !!state.pendingCloudEmptyWipe;
+        const deletedBoardIds = [...state.pendingDeletedBoardIds];
+        const deletedProjectIds = [...state.pendingDeletedProjectIds];
+        const result = await saveWorkspace(
+          state.cloudUserId,
+          {
+            boards: state.boards,
+            storageLocations: state.storageLocations,
+            lumberTypes: state.lumberTypes,
+            savedProjects: state.savedProjects,
+            activeProjectName: state.activeProjectName,
+            activeParts: state.activeParts,
+            completedOperations: state.completedOperations,
+            offcutSettings: state.offcutSettings,
+            unitSystem: state.unitSystem,
+            defaultKerfMm: state.defaultKerfMm,
+            activeKerfMm: state.activeKerfMm,
+            activeCuttingPlan: state.activeCuttingPlan,
+          },
+          { allowEmptyWipe, deletedBoardIds, deletedProjectIds }
+        );
+        if (result.ok) {
+          useAppStore.getState().clearPendingDeletes();
+          if (allowEmptyWipe) {
+            useAppStore.getState().clearPendingCloudEmptyWipe();
+          }
+        }
+        setCloudSaving(false);
+        saveInFlightRef.current = false;
+        if (!result.ok) toast.error(`Cloud save failed: ${result.message}`);
+        // Flush latest workshop if more edits landed during this save
+        if (pendingSaveRef.current) {
+          pendingSaveRef.current = false;
+          await runSave();
+        }
+      };
+      await runSave();
     }, 500);
 
     return () => {

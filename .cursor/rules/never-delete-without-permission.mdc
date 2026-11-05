@@ -1,0 +1,37 @@
+---
+description: Never delete workshop data, files, or cloud rows without Lou's explicit permission
+alwaysApply: true
+---
+
+# Never delete without permission
+
+Lou’s workshop data was wiped by an automatic cloud sync delete. This must not happen again.
+
+## Hard rule
+
+**Do not delete anything without Lou’s explicit permission in the current message.**
+
+That includes:
+
+- Inventory boards / lots in Supabase or local state
+- Saved projects, cut plans, completed cut ops
+- Database rows, tables, or “cleanup” / “orphan” deletes
+- Git history, force-push, hard reset, or discarding uncommitted work
+- Project files the user did not ask to remove
+
+## App / sync code
+
+- Cloud sync for boards and projects must be **upsert / update only**.
+- Never `delete().eq('user_id', …)` for all of a user’s boards or projects as part of a normal save.
+- Never “orphan delete” (delete cloud rows missing from the local snapshot) during sync.
+- The only allowed deletes are:
+  1. A **single** board or project the user just confirmed deleting in the UI, or
+  2. **Settings → Wipe**, after the user confirms the danger dialog.
+
+If a sync or migration seems to need a bulk delete, **stop and ask Lou first**.
+
+## Agent behavior
+
+- Do not run destructive shell/git/db commands unless Lou clearly asked for that exact action.
+- Do not “clean up” inventory, projects, or cloud data as a side effect of a fix.
+- Prefer soft-fail / skip over delete when local and cloud disagree.

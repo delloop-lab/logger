@@ -190,33 +190,122 @@ export async function loadWorkspace(userId: string): Promise<WorkspaceResult> {
   };
 }
 
-export async function saveBoards(userId: string, boards: Board[]): Promise<{ ok: true } | { ok: false; message: string }> {
-  const supabase = getSupabase();
-  if (!supabase) return { ok: false, message: 'Supabase is not configured yet.' };
-
-  const { error: delError } = await supabase.from('boards').delete().eq('user_id', userId);
-  if (delError) return { ok: false, message: delError.message };
-
-  if (boards.length === 0) return { ok: true };
-
-  const { error } = await supabase.from('boards').insert(boards.map((b) => boardToRow(userId, b)));
-  if (error) return { ok: false, message: error.message };
-  return { ok: true };
-}
-
-export async function saveProjects(
+export async function saveBoards(
   userId: string,
-  projects: SavedProject[]
+  boards: Board[],
+  options?: { allowEmptyWipe?: boolean }
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, message: 'Supabase is not configured yet.' };
 
-  const { error: delError } = await supabase.from('saved_projects').delete().eq('user_id', userId);
-  if (delError) return { ok: false, message: delError.message };
+  // Never wipe cloud inventory from an empty local snapshot (same failure mode as projects)
+  if (boards.length === 0) {
+    if (!options?.allowEmptyWipe) return { ok: true };
+    const { error } = await supabase.from('boards').delete().eq('user_id', userId);
+    if (error) return { ok: false, message: error.message };
+    return { ok: true };
+  }
 
-  if (projects.length === 0) return { ok: true };
+  const byId = new Map<string, Board>();
+  for (const b of boards) {
+    if (!b?.id) continue;
+    byId.set(String(b.id), b);
+  }
+  const unique = Array.from(byId.values());
+  const rows = unique.map((b) => boardToRow(userId, b));
 
-  const baseRows = projects.map((p) => ({
+  const isConflictTargetMismatch = (msg: string) =>
+    /no unique or exclusion constraint matching the ON CONFLICT/i.test(msg);
+
+  const tryUpsert = async () => {
+    for (const conflict of ['user_id,id', 'id'] as const) {
+      const res = await supabase.from('boards').upsert(rows, { onConflict: conflict });
+      if (!res.error) return null;
+      if (!isConflictTargetMismatch(res.error.message)) return res.error;
+    }
+    return { message: 'ON CONFLICT target mismatch' } as { message: string };
+  };
+
+  const mergeRows = async () => {
+    for (const row of rows) {
+      const id = String(row.id);
+      const existing = await supabase
+        .from('boards')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('id', id)
+        .maybeSingle();
+      if (existing.error) return existing.error;
+      if (existing.data) {
+        const { id: _id, user_id: _uid, created_at: _c, ...patch } = row;
+        const upd = await supabase.from('boards').update(patch).eq('user_id', userId).eq('id', id);
+        if (upd.error) return upd.error;
+      } else {
+        const ins = await supabase.from('boards').insert(row);
+        if (ins.error) return ins.error;
+      }
+    }
+    return null;
+  };
+
+  let writeError = await tryUpsert();
+  if (writeError && isConflictTargetMismatch(writeError.message)) {
+    writeError = await mergeRows();
+  }
+  if (writeError) return { ok: false, message: writeError.message };
+
+  // Upsert only — never orphan-delete. Explicit deletes go through deleteBoardRows.
+  return { ok: true };
+}
+
+/** Delete specific boards the user confirmed removing (never bulk/orphan). */
+export async function deleteBoardRows(
+  userId: string,
+  boardIds: string[]
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, message: 'Supabase is not configured yet.' };
+  const ids = Array.from(new Set(boardIds.map(String).filter(Boolean)));
+  if (ids.length === 0) return { ok: true };
+  const { error } = await supabase.from('boards').delete().eq('user_id', userId).in('id', ids);
+  if (error) return { ok: false, message: error.message };
+  return { ok: true };
+}
+
+function dedupeProjectsById(projects: SavedProject[]): SavedProject[] {
+  const byId = new Map<string, SavedProject>();
+  for (const p of projects) {
+    if (!p?.id) continue;
+    byId.set(String(p.id), p);
+  }
+  return Array.from(byId.values());
+}
+
+function projectStatusSql(status: SavedProject['status'] | undefined): string {
+  if (status === 'paused') return 'paused';
+  if (status === 'completed') return 'completed';
+  return 'active';
+}
+
+export async function saveProjects(
+  userId: string,
+  projects: SavedProject[],
+  options?: { allowEmptyWipe?: boolean }
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, message: 'Supabase is not configured yet.' };
+
+  const unique = dedupeProjectsById(projects);
+
+  // Never wipe the cloud library from an empty local snapshot (recoverable data loss)
+  if (unique.length === 0) {
+    if (!options?.allowEmptyWipe) return { ok: true };
+    const { error } = await supabase.from('saved_projects').delete().eq('user_id', userId);
+    if (error) return { ok: false, message: error.message };
+    return { ok: true };
+  }
+
+  const baseRows = unique.map((p) => ({
     id: p.id,
     user_id: userId,
     name: p.name,
@@ -224,57 +313,126 @@ export async function saveProjects(
     parts: p.parts,
   }));
 
-  // Prefer kerf + pause + cutting plan + showcase columns when they exist; fall back if schema is behind
   const withExtras = baseRows.map((row, i) => ({
     ...row,
-    kerf_mm: projects[i].kerfMm ?? null,
-    status:
-      projects[i].status === 'paused'
-        ? 'paused'
-        : projects[i].status === 'completed'
-          ? 'completed'
-          : 'active',
-    pause_reason: projects[i].pauseReason ?? null,
-    description: projects[i].description ?? null,
-    difficulty: projects[i].difficulty ?? null,
-    cutting_plan: projects[i].cuttingPlan ?? null,
-    completed_cut_ops: projects[i].completedCutOps ?? [],
+    kerf_mm: unique[i].kerfMm ?? null,
+    status: projectStatusSql(unique[i].status),
+    pause_reason: unique[i].pauseReason ?? null,
+    description: unique[i].description?.trim() ? unique[i].description.trim() : null,
+    difficulty: unique[i].difficulty ?? null,
+    cutting_plan: unique[i].cuttingPlan ?? null,
+    completed_cut_ops: unique[i].completedCutOps ?? [],
   }));
 
-  const first = await supabase.from('saved_projects').insert(withExtras);
-  if (!first.error) return { ok: true };
-
-  const missingCols =
+  const isMissingCol = (msg: string) =>
     /kerf_mm|status|pause_reason|description|difficulty|cutting_plan|completed_cut_ops|schema cache/i.test(
-      first.error.message
+      msg
     );
-  if (!missingCols) return { ok: false, message: first.error.message };
+  const isConflictTargetMismatch = (msg: string) =>
+    /no unique or exclusion constraint matching the ON CONFLICT/i.test(msg);
 
-  // Prefer keeping cutting plans even if newer showcase columns are missing
-  const withPlan = baseRows.map((row, i) => ({
-    ...row,
-    kerf_mm: projects[i].kerfMm ?? null,
-    status:
-      projects[i].status === 'paused'
-        ? 'paused'
-        : projects[i].status === 'completed'
-          ? 'completed'
-          : 'active',
-    pause_reason: projects[i].pauseReason ?? null,
-    cutting_plan: projects[i].cuttingPlan ?? null,
-    completed_cut_ops: projects[i].completedCutOps ?? [],
-  }));
-  const planAttempt = await supabase.from('saved_projects').insert(withPlan);
-  if (!planAttempt.error) return { ok: true };
+  /** Live DBs may still be PK(id) or PK(user_id,id) — try both, then row merge. */
+  const tryUpsert = async (rows: Record<string, unknown>[]) => {
+    for (const conflict of ['user_id,id', 'id'] as const) {
+      const res = await supabase.from('saved_projects').upsert(rows, { onConflict: conflict });
+      if (!res.error) return null;
+      if (!isConflictTargetMismatch(res.error.message)) return res.error;
+    }
+    return { message: 'ON CONFLICT target mismatch', code: '42P10' } as {
+      message: string;
+      code?: string;
+    };
+  };
 
-  const withKerfOnly = baseRows.map((row, i) => ({
-    ...row,
-    kerf_mm: projects[i].kerfMm ?? null,
-  }));
-  const second = await supabase.from('saved_projects').insert(withKerfOnly);
-  if (!second.error) return { ok: true };
+  const mergeRows = async (rows: Record<string, unknown>[]) => {
+    for (const row of rows) {
+      const id = String(row.id);
+      const existing = await supabase
+        .from('saved_projects')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('id', id)
+        .maybeSingle();
+      if (existing.error) return existing.error;
+      if (existing.data) {
+        const { id: _id, user_id: _uid, ...patch } = row;
+        const upd = await supabase
+          .from('saved_projects')
+          .update(patch)
+          .eq('user_id', userId)
+          .eq('id', id);
+        if (upd.error) return upd.error;
+      } else {
+        const ins = await supabase.from('saved_projects').insert(row);
+        if (ins.error) return ins.error;
+      }
+    }
+    return null;
+  };
 
-  const { error } = await supabase.from('saved_projects').insert(baseRows);
+  const writePayloads: Record<string, unknown>[][] = [
+    withExtras,
+    withExtras.map((row) => {
+      const { cutting_plan: _c, completed_cut_ops: _o, ...rest } = row;
+      return rest;
+    }),
+    baseRows.map((row, i) => ({
+      ...row,
+      kerf_mm: unique[i].kerfMm ?? null,
+      status: projectStatusSql(unique[i].status),
+      description: unique[i].description?.trim() ? unique[i].description.trim() : null,
+      difficulty: unique[i].difficulty ?? null,
+    })),
+    baseRows.map((row, i) => ({
+      ...row,
+      kerf_mm: unique[i].kerfMm ?? null,
+    })),
+    baseRows,
+  ];
+
+  let writeError: { message: string } | null = null;
+  let savedPayload: Record<string, unknown>[] | null = null;
+
+  for (const payload of writePayloads) {
+    writeError = await tryUpsert(payload);
+    if (!writeError) {
+      savedPayload = payload;
+      break;
+    }
+    if (isConflictTargetMismatch(writeError.message)) {
+      writeError = await mergeRows(payload);
+      if (!writeError) {
+        savedPayload = payload;
+        break;
+      }
+    }
+    if (!isMissingCol(writeError.message) && !isConflictTargetMismatch(writeError.message)) {
+      return { ok: false, message: writeError.message };
+    }
+  }
+
+  if (writeError || !savedPayload) {
+    return { ok: false, message: writeError?.message || 'Failed to save projects.' };
+  }
+
+  // Upsert only — never orphan-delete. Explicit deletes go through deleteProjectRows.
+  return { ok: true };
+}
+
+/** Delete specific projects the user confirmed removing (never bulk/orphan). */
+export async function deleteProjectRows(
+  userId: string,
+  projectIds: string[]
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, message: 'Supabase is not configured yet.' };
+  const ids = Array.from(new Set(projectIds.map(String).filter(Boolean)));
+  if (ids.length === 0) return { ok: true };
+  const { error } = await supabase
+    .from('saved_projects')
+    .delete()
+    .eq('user_id', userId)
+    .in('id', ids);
   if (error) return { ok: false, message: error.message };
   return { ok: true };
 }
@@ -361,11 +519,17 @@ export async function savePreferences(
 
 export async function saveWorkspace(
   userId: string,
-  snapshot: WorkspaceSnapshot
+  snapshot: WorkspaceSnapshot,
+  options?: {
+    allowEmptyWipe?: boolean;
+    /** Only IDs the user explicitly confirmed deleting in the UI. */
+    deletedBoardIds?: string[];
+    deletedProjectIds?: string[];
+  }
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const [boards, projects, prefs, locs] = await Promise.all([
-    saveBoards(userId, snapshot.boards),
-    saveProjects(userId, snapshot.savedProjects),
+    saveBoards(userId, snapshot.boards, options),
+    saveProjects(userId, snapshot.savedProjects, options),
     savePreferences(userId, snapshot),
     pushStorageLocations(userId, snapshot.storageLocations),
   ]);
@@ -374,6 +538,17 @@ export async function saveWorkspace(
   if (!projects.ok) return projects;
   if (!prefs.ok) return prefs;
   if (!locs.ok) return { ok: false, message: locs.message };
+
+  // Explicit user-confirmed deletes only (never inferred from snapshot diff)
+  if (options?.deletedBoardIds?.length) {
+    const del = await deleteBoardRows(userId, options.deletedBoardIds);
+    if (!del.ok) return del;
+  }
+  if (options?.deletedProjectIds?.length) {
+    const del = await deleteProjectRows(userId, options.deletedProjectIds);
+    if (!del.ok) return del;
+  }
+
   return { ok: true };
 }
 

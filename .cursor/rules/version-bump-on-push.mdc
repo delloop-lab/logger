@@ -1,0 +1,14 @@
+---
+description: Always bump APP_VERSION by .010 when pushing
+alwaysApply: true
+---
+
+# Version bump on push
+
+Whenever the user asks to **push** (or commit+push) this repo:
+
+1. Before committing (or as part of the push prep), bump the app version by **+010** on the build segment via `npm run version:bump` (e.g. `09.590` → `09.600`).
+2. Include `src/lib/version.ts` in the commit that gets pushed.
+3. Do **not** skip the bump unless the user explicitly says not to.
+
+Display format stays `BETA V.MM.BBB` from `src/lib/version.ts`.
