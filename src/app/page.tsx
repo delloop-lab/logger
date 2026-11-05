@@ -203,9 +203,12 @@ export default function Page() {
           open={loginGateOpen && !signedIn}
           onClose={() => setLoginGateOpen(false)}
           title="Log in required"
-          subtitle="You need to log in or register to see stock, projects, cutting drawings, and more."
           size="md"
         >
+          <p className="text-sm text-gray-300 leading-relaxed">
+            You need to log in or register to see stock, projects, cutting drawings, and more.
+            It&apos;s free!
+          </p>
           <button
             type="button"
             data-login-trigger

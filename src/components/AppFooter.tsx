@@ -17,9 +17,6 @@ export default function AppFooter() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 py-2.5 text-[11px] text-gray-400 md:px-8">
           <p className="m-0">Copyright (c) 2026 Lou Schillaci</p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span className="font-mono text-gray-500" title="Application version">
-              Version {versionLabel}
-            </span>
             <button
               type="button"
               onClick={() => setGettingStartedOpen(true)}
