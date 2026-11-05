@@ -1,9 +1,9 @@
 # Logger Help Guide
 
-**Version:** BETA 1.06.000  
+**Version:** BETA V.09.560  
 **Publisher:** Lou Schillaci
 
-> **BETA notice:** Logger (formally TimberVault) is a **BETA** product. Features, screens, and workflows are updated frequently. Expect changes between sessions; report issues via **Contact** in the app footer.
+> **BETA notice:** Logger is a **BETA** product. Features, screens, and workflows are updated frequently. Expect changes between sessions; report issues via **Contact** in the app footer.
 
 > **Browser app:** Works in your browser. Nothing to download or install. Use it on your phone, tablet, or computer.
 
@@ -33,6 +33,7 @@ Open **Settings** before logging the first board so kerf and offcut rules stay p
 - **Primary units:** Metric (mm) or Imperial (inches). Display switches; stock is stored consistently underneath.
 - **Default saw kerf:** Your usual table or miter saw blade width (for example 3 mm or 0.125 in). New projects pick this up; you can still override kerf on a single project.
 - **Minimum reusable offcut size:** Length and width thresholds (for example 100 × 100 mm). Pieces at or above this return to inventory as offcuts; smaller scraps are treated as waste.
+- **Timber species:** Add or rename lumber types in Settings (for example Birch Plywood or Jarrah). These appear in Quick Log and Projects & Cuts when you pick wood species.
 - **Storage locations:** Add racks, bins, shed shelves, and benches that match your shop so Quick Log can tag where each lot sits.
 
 ### Step 2: Log your first inventory
@@ -40,9 +41,10 @@ Open **Settings** before logging the first board so kerf and offcut rules stay p
 Take a tape to the rack or offcut bin and log a few boards in **Quick Log** (3 to 5 lots is enough to try nesting).
 
 - **Dimensions:** Length × Width × Thickness in your chosen units, plus quantity for identical boards in one lot.
-- **Species / material:** Pick from the list (Pine / Pallet, Walnut, European Oak, Maple, Plywood, and more). Logger assigns a lot tag id from the species prefix.
+- **Species / material:** Pick from your lumber types in Settings (defaults include Pine / Pallet, Walnut, European Oak, and more). Logger assigns a lot tag id from the species prefix.
 - **Source:** New, pallet, salvaged, cut-off, furniture teardown, offcut bin, or purchased.
-- **Defects & condition:** Flag warp, knots, checks, live edge, waney edges, nail or screw holes, and similar. Optional notes travel onto pull tags when that lot is used.
+- **Description or Supplier (optional):** Beside storage location. Salvaged or Furniture Teardown opens **Description** (e.g. bedhead, stool leg). New or Purchased opens **Supplier** (e.g. timber yard).
+- **Defects & condition:** Flag warp, knots, checks, live edge, waney edges, nail or screw holes, and similar. Optional defect notes travel onto pull tags when that lot is used.
 - **Storage location:** Choose the rack or bin so you can find the board later from Inventory or a QR scan.
 
 After saving, review lots under **Inventory**. Print a Stock Tag (**System Print** or **Save PNG**) if you want rack labels you can scan later.
@@ -64,7 +66,7 @@ Open **Projects & Cuts** to set up a build and see the yield engine work against
 
 ### What to try next
 
-- **What Can I Build?** ranks templates and saved projects against stock on hand (READY / ALMOST / NEED STOCK).
+- **What Can I Build? (in development)** ranks templates and saved projects against stock on hand.
 - **QR Scanner** looks up a board from a printed tag at the rack (camera, photo, or typed tag id).
 - Keep location names consistent between Settings and Quick Log so filters stay useful.
 
@@ -78,7 +80,7 @@ Your workshop home screen. Shows how much timber is available (piece count and f
 ![Dashboard tab](public/help/help-tab-dashboard.png)
 
 ### Quick Log
-Fast way to add new timber to stock. Enter species, source, length / width / thickness, quantity, and storage location. Optionally mark defects (warp, knot, split, and so on) plus notes. Logger assigns a lot tag id automatically (based on species). After you save, the lot appears in Inventory and on the Dashboard.
+Fast way to add new timber to stock. Choose species from your lumber types, set source, storage location, dimensions, and quantity. Source opens an optional field beside location: **Description** (for Salvaged or Furniture Teardown, e.g. bedhead or stool leg) or **Supplier** (for New or Purchased). Optionally mark defects (warp, knot, split, and so on) plus defect notes. Logger assigns a lot tag id automatically (based on species). After you save, the lot appears in Inventory and on the Dashboard.
 
 ![Quick Log tab](public/help/help-tab-quick-log.png)
 
@@ -88,12 +90,12 @@ Full catalogue of every lot: raw stock, reusable offcuts, waste remnants, and fi
 ![Inventory tab](public/help/help-tab-inventory.png)
 
 ### Projects & Cuts
-Plan a build end to end. Name or open a project, add parts (name, species, size, quantity), set kerf and cutting strategy, then generate nested cutting sheets against available boards. Review shop drawings, save or pause projects when stock is short, resume later, and apply cuts so remnants / finished parts update Inventory.
+Plan a build end to end. Name or open a project, add parts (name, species from your lumber types, size, quantity), set kerf and cutting strategy, then generate nested cutting sheets against available boards. Review shop drawings, save or pause projects when stock is short, resume later, and apply cuts so remnants / finished parts update Inventory.
 
 ![Projects & Cuts tab](public/help/help-tab-projects-cuts.png)
 
-### What Can I Build?
-Idea finder for the timber you already have. Compares project templates and your saved projects to available boards by species and size. Shows READY / ALMOST / NEED STOCK so you can pick a realistic next build, then open it in Projects & Cuts to generate a cut list.
+### What Can I Build? (in development)
+Idea finder for the timber you already have. Compares project templates and your saved projects to available boards by species and size so you can pick a realistic next build, then open it in Projects & Cuts to generate a cut list. This area is still in development.
 
 ![What Can I Build tab](public/help/help-tab-what-can-i-build.png)
 
@@ -103,11 +105,11 @@ Find a board at the rack without typing. Start the camera (or upload a photo of 
 ![QR Scanner tab](public/help/help-tab-qr-scanner.png)
 
 ### Settings
-Workshop preferences: metric (mm) or imperial (inches), default saw kerf for new projects, minimum size that counts as a reusable offcut, and your list of storage locations (rack, workbench, shed, and so on). Also shows who is signed in and tools to reset workshop data if you need a clean start.
+Workshop preferences: metric (mm) or imperial (inches), default saw kerf for new projects, minimum size that counts as a reusable offcut, lumber types (add or rename species such as Birch Plywood or Jarrah), and your list of storage locations (rack, workbench, shed, and so on). Also shows who is signed in and tools to reset workshop data if you need a clean start.
 
 ![Settings tab](public/help/help-tab-settings.png)
 
-*(Account email is blurred in the Settings screenshot.)*
+*(Settings screenshot shows kerf, offcut rules, and lumber types.)*
 
 ---
 
@@ -136,7 +138,8 @@ Printed tags encode the board tag id so the **QR Scanner** can find the lot agai
 
 ## Tips
 
-- Keep locations consistent (same names in Quick Log and Settings) so filters stay useful.
+- Keep locations and lumber type names consistent (Settings ↔ Quick Log) so filters stay useful.
+- Use Description on salvaged / teardown stock and Supplier on new / purchased stock so you remember what each lot is.
 - Log reusable offcuts after a cut so the matcher and cut planner can reuse them.
 - Print QR labels from Inventory so the QR Scanner can find lots at the rack.
 
@@ -153,17 +156,23 @@ Yes, to keep and sync your own workshop. Without login you may only see demo/sam
 **Metric or imperial?**  
 Either. Switch in **Settings**; dimensions convert for display while stock is stored consistently underneath.
 
+**Can I add my own lumber types?**  
+Yes. In **Settings**, add or rename types such as Birch Plywood or Jarrah. They appear in Quick Log and Projects & Cuts.
+
+**What are Description and Supplier on Quick Log?**  
+Optional fields beside Storage Location. **Salvaged** or **Furniture Teardown** shows **Description** (what the piece was). **New** or **Purchased** shows **Supplier** (where you bought it).
+
 **What does “consumed” mean?**  
 The lot is no longer available as pullable stock (used up or installed finished work, depending on classification).
 
 **Where do I get help or report a problem?**  
-Use **Contact** in the footer (`silvervirtual@gmail.com`), or open **Help** in the footer for this guide inside the app.
+Use **Contact** in the footer (`lou@schillaci.me`), or open **Help** / **Getting started** in the footer for the in-app guides.
 
 ---
 
 ## Contact
 
 Lou Schillaci  
-Email: [silvervirtual@gmail.com](mailto:silvervirtual@gmail.com)
+Email: [lou@schillaci.me](mailto:lou@schillaci.me)
 
 Copyright (c) 2026 Lou Schillaci

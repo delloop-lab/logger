@@ -94,6 +94,14 @@ export function createDemoWorkspace(): WorkspaceData {
   return {
     boards,
     storageLocations: [...DEMO_LOCATIONS],
+    lumberTypes: [
+      'Pine / Pallet',
+      'Plywood',
+      'Walnut',
+      'European Oak',
+      'Maple',
+      'Mahogany',
+    ],
     savedProjects,
     activeProjectName: 'New Project',
     activeParts: [],

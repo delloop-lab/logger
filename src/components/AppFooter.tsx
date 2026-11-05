@@ -35,7 +35,7 @@ export default function AppFooter() {
               Help
             </button>
             <a
-              href="mailto:silvervirtual@gmail.com"
+              href="mailto:lou@schillaci.me"
               className="font-medium text-gray-300 hover:text-orange-400 transition-colors"
             >
               Contact

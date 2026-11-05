@@ -36,6 +36,8 @@ alter table public.user_preferences
   add column if not exists default_kerf_mm numeric not null default 3.2;
 alter table public.user_preferences
   add column if not exists active_kerf_mm numeric not null default 3.2;
+alter table public.user_preferences
+  add column if not exists lumber_types jsonb not null default '[]'::jsonb;
 
 -- Workshop storage locations
 create table if not exists public.storage_locations (

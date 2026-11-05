@@ -2,15 +2,19 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { Sliders, Save, Plus, Trash2, Ruler, RotateCcw } from 'lucide-react';
+import { Sliders, Save, Plus, Trash2, Ruler, RotateCcw, Pencil, Check, X } from 'lucide-react';
 import { notify, toast } from '@/lib/notify';
 import { displayToMm, formatDim, mmToDisplay, unitLabel, type UnitSystem } from '@/lib/units';
 import { getSupabase } from '@/lib/supabase/client';
+import { DEFAULT_LUMBER_TYPES } from '@/lib/store';
 
 export default function StorageSettings() {
   const store = useAppStore();
   const settings = store.offcutSettings;
   const storageLocations = store.storageLocations;
+  const lumberTypes = store.lumberTypes?.length
+    ? store.lumberTypes
+    : [...DEFAULT_LUMBER_TYPES];
   const unitSystem = store.unitSystem;
   const setUnitSystem = store.setUnitSystem;
   const resetWorkshopData = store.resetWorkshopData;
@@ -28,6 +32,9 @@ export default function StorageSettings() {
     String(mmToDisplay(defaultKerfMm, unitSystem, unitSystem === 'imperial' ? 3 : 1))
   );
   const [newLocation, setNewLocation] = useState('');
+  const [newLumberType, setNewLumberType] = useState('');
+  const [editingLumber, setEditingLumber] = useState<string | null>(null);
+  const [editLumberValue, setEditLumberValue] = useState('');
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
@@ -93,6 +100,65 @@ export default function StorageSettings() {
   const handleDeleteLocation = (loc: string) => {
     store.updateStorageLocations(storageLocations.filter((l) => l !== loc));
     toast.error(`Removed location: ${loc}`);
+  };
+
+  const handleAddLumberType = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newLumberType.trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    if (lumberTypes.some((t) => t.toLowerCase() === name.toLowerCase())) {
+      toast.error('That lumber type already exists.');
+      return;
+    }
+    store.updateLumberTypes([...lumberTypes, name]);
+    setNewLumberType('');
+    toast.success(`Added lumber type: ${name}`);
+  };
+
+  const startEditLumber = (name: string) => {
+    setEditingLumber(name);
+    setEditLumberValue(name);
+  };
+
+  const cancelEditLumber = () => {
+    setEditingLumber(null);
+    setEditLumberValue('');
+  };
+
+  const saveEditLumber = () => {
+    if (!editingLumber) return;
+    const result = store.renameLumberType(editingLumber, editLumberValue);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    toast.success('Lumber type updated.');
+    cancelEditLumber();
+  };
+
+  const handleDeleteLumberType = async (name: string) => {
+    if (lumberTypes.length <= 1) {
+      toast.error('Keep at least one lumber type.');
+      return;
+    }
+    const inUse =
+      store.boards.some((b) => b.species.toLowerCase() === name.toLowerCase()) ||
+      store.activeParts.some((p) => p.species.toLowerCase() === name.toLowerCase()) ||
+      store.savedProjects.some((proj) =>
+        proj.parts.some((p) => p.species.toLowerCase() === name.toLowerCase())
+      );
+    if (inUse) {
+      const ok = await notify.confirm({
+        title: 'Remove lumber type?',
+        message: `"${name}" is used on stock or projects. Removing it from the list will not delete those lots, but it will no longer appear in new Quick Log / part dropdowns unless you add it again.`,
+        confirmLabel: 'Remove from list',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    store.updateLumberTypes(lumberTypes.filter((t) => t.toLowerCase() !== name.toLowerCase()));
+    if (editingLumber?.toLowerCase() === name.toLowerCase()) cancelEditLumber();
+    toast.success(`Removed lumber type: ${name}`);
   };
 
   return (
@@ -214,6 +280,99 @@ export default function StorageSettings() {
 
       <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-4 shadow-xl">
         <h3 className="text-base font-bold text-white flex items-center gap-2">
+          Lumber types ({lumberTypes.length})
+        </h3>
+        <p className="text-xs text-gray-400 leading-relaxed">
+          Species and sheet goods shown in Quick Log and Projects &amp; Cuts. Add custom stock such as
+          Birch Plywood or Jarrah, or rename the built-in labels.
+        </p>
+
+        <form onSubmit={handleAddLumberType} className="flex gap-3">
+          <input
+            type="text"
+            placeholder="e.g. Birch Plywood, Jarrah"
+            value={newLumberType}
+            onChange={(e) => setNewLumberType(e.target.value)}
+            className="flex-1 bg-[#121417] border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+          />
+          <button
+            type="submit"
+            className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-orange-500" /> Add type
+          </button>
+        </form>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          {lumberTypes.map((name) => {
+            const editing = editingLumber === name;
+            return (
+              <div
+                key={name}
+                className="bg-[#121417] border border-gray-800 p-3 rounded-xl flex items-center gap-2 text-xs text-gray-300"
+              >
+                {editing ? (
+                  <>
+                    <input
+                      type="text"
+                      value={editLumberValue}
+                      onChange={(e) => setEditLumberValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          saveEditLumber();
+                        }
+                        if (e.key === 'Escape') cancelEditLumber();
+                      }}
+                      className="flex-1 min-w-0 bg-[#1e2228] border border-orange-500/50 rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={saveEditLumber}
+                      className="text-emerald-400 hover:text-emerald-300 p-1 cursor-pointer"
+                      aria-label="Save lumber type"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEditLumber}
+                      className="text-gray-500 hover:text-white p-1 cursor-pointer"
+                      aria-label="Cancel edit"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 min-w-0 font-mono truncate">{name}</span>
+                    <button
+                      type="button"
+                      onClick={() => startEditLumber(name)}
+                      className="text-gray-500 hover:text-orange-400 p-1 cursor-pointer"
+                      aria-label={`Edit ${name}`}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLumberType(name)}
+                      className="text-gray-500 hover:text-red-400 p-1 cursor-pointer"
+                      aria-label={`Remove ${name}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-4 shadow-xl">
+        <h3 className="text-base font-bold text-white flex items-center gap-2">
           Workshop storage locations ({storageLocations.length})
         </h3>
 
@@ -258,8 +417,8 @@ export default function StorageSettings() {
         </h3>
         <p className="text-xs text-gray-400 leading-relaxed">
           Clears <strong className="text-gray-200">all inventory</strong>, finished pieces, offcuts,
-          cut history, completed cut marks, and saved projects. Unit system and storage location
-          names are kept. This syncs to the cloud for your signed-in account.
+          cut history, completed cut marks, and saved projects. Unit system, lumber types, and
+          storage location names are kept. This syncs to the cloud for your signed-in account.
         </p>
         <button
           type="button"

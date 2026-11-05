@@ -90,6 +90,27 @@ fs.mkdirSync(outDir, { recursive: true });
 for (const tab of tabs) {
   await clickTab(page, tab.name);
   await page.evaluate(() => window.scrollTo(0, 0));
+
+  // Quick Log: show Description field (Salvaged / Furniture Teardown)
+  if (tab.name === 'Quick Log') {
+    const source = page.locator('label', { hasText: 'Source / Origin' }).locator('..').locator('select');
+    if ((await source.count()) > 0) {
+      await source.selectOption({ label: 'Furniture Teardown' });
+      await page.waitForTimeout(200);
+    }
+  }
+
+  // Settings: bring lumber types into view under the fold when possible
+  if (tab.name === 'Settings') {
+    const lumberHeading = page.getByText('Lumber types', { exact: false }).first();
+    if ((await lumberHeading.count()) > 0) {
+      await lumberHeading.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(200);
+      // Prefer showing units + lumber block: scroll back slightly from bottom
+      await page.evaluate(() => window.scrollBy(0, -80));
+    }
+  }
+
   await redactPii(page);
   await page.waitForTimeout(200);
   const dest = path.join(outDir, tab.file);

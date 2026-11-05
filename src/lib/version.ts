@@ -2,11 +2,12 @@
 export const APP_CHANNEL = 'BETA' as const;
 
 /**
- * App build version: major.minor.build
- * Bumped by `npm run version:bump` (and after successful `git push` via Cursor hook).
+ * App build version: minor.build (e.g. 09.560).
+ * Displayed as `BETA V.09.560`.
+ * Bumped by `npm run version:bump` (+010 on the build segment) after successful push.
  */
-export const APP_VERSION = '1.06.004';
+export const APP_VERSION = '09.560';
 
 export function formatAppVersion(version = APP_VERSION, channel = APP_CHANNEL): string {
-  return `${channel} ${version}`;
+  return `${channel} V.${version}`;
 }

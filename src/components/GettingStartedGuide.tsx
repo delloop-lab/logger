@@ -9,9 +9,9 @@ export default function GettingStartedGuide() {
   return (
     <div className="space-y-5 text-sm text-gray-300 leading-relaxed">
       <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-100 text-xs font-medium">
-        <strong className="font-black tracking-wide">BETA</strong>; Logger (formally TimberVault) is
-        a beta product and is being updated all the time. Screens and workflows may change between
-        sessions. You are on <span className="font-mono text-amber-200">{version}</span>.
+        <strong className="font-black tracking-wide">BETA</strong>; Logger is a beta product and is
+        being updated all the time. Screens and workflows may change between sessions. You are on{' '}
+        <span className="font-mono text-amber-200">{version}</span>.
       </div>
 
       <div className="space-y-1.5">
@@ -48,6 +48,11 @@ export default function GettingStartedGuide() {
               inventory as offcuts; smaller scraps are treated as waste.
             </li>
             <li>
+              <strong className="text-gray-200">Timber species:</strong> Add or rename lumber types
+              in Settings (for example Birch Plywood or Jarrah). These appear in Quick Log and
+              Projects &amp; Cuts when you pick wood species.
+            </li>
+            <li>
               <strong className="text-gray-200">Storage locations:</strong> Add racks, bins, shed
               shelves, and benches that match your shop so Quick Log can tag where each lot sits.
             </li>
@@ -67,18 +72,23 @@ export default function GettingStartedGuide() {
               your chosen units, plus quantity for identical boards in one lot.
             </li>
             <li>
-              <strong className="text-gray-200">Species / material:</strong> Pick from the list
-              (Pine / Pallet, Walnut, European Oak, Maple, Plywood, and more). Logger assigns a lot
-              tag id from the species prefix.
+              <strong className="text-gray-200">Species / material:</strong> Pick from your lumber
+              types in Settings (defaults include Pine / Pallet, Walnut, European Oak, and more).
+              Logger assigns a lot tag id from the species prefix.
             </li>
             <li>
               <strong className="text-gray-200">Source:</strong> New, pallet, salvaged, cut-off,
               furniture teardown, offcut bin, or purchased.
             </li>
             <li>
+              <strong className="text-gray-200">Description or Supplier (optional):</strong> Beside
+              storage location. Salvaged or Furniture Teardown opens Description (e.g. bedhead,
+              stool leg). New or Purchased opens Supplier (e.g. timber yard).
+            </li>
+            <li>
               <strong className="text-gray-200">Defects &amp; condition:</strong> Flag warp, knots,
-              checks, live edge, waney edges, nail or screw holes, and similar. Optional notes
-              travel onto pull tags when that lot is used.
+              checks, live edge, waney edges, nail or screw holes, and similar. Optional defect
+              notes travel onto pull tags when that lot is used.
             </li>
             <li>
               <strong className="text-gray-200">Storage location:</strong> Choose the rack or bin so
@@ -148,8 +158,8 @@ export default function GettingStartedGuide() {
           <h4 className="text-sm font-bold text-gray-200">What to try next</h4>
           <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-400">
             <li>
-              <strong className="text-gray-200">What Can I Build?</strong> ranks templates and saved
-              projects against stock on hand (READY / ALMOST / NEED STOCK).
+              <strong className="text-gray-200">What Can I Build? (in development)</strong> ranks
+              templates and saved projects against stock on hand.
             </li>
             <li>
               <strong className="text-gray-200">QR Scanner</strong> looks up a board from a printed

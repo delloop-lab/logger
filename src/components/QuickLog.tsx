@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, DEFAULT_LUMBER_TYPES } from '@/lib/store';
 import { PlusCircle, AlertTriangle } from 'lucide-react';
 import { toast } from '@/lib/notify';
 import { displayToMm, mmToDisplay, unitLabel } from '@/lib/units';
 import { nextLotTagId, tagPrefixForSpecies } from '@/lib/tags';
 import { DEFECT_OPTIONS, type DefectType } from '@/lib/defects';
+import SpeciesSelect from '@/components/SpeciesSelect';
 
 type Props = {
   onLogged?: () => void;
@@ -19,11 +20,16 @@ export default function QuickLog({ onLogged }: Props) {
   const activeLocations = useAppStore((s) =>
     (s.storageLocations || []).filter((loc) => loc && loc.trim() !== '')
   );
+  const lumberTypes = useAppStore((s) => s.lumberTypes);
   const u = unitLabel(unitSystem);
 
-  const [species, setSpecies] = useState('Pine / Pallet');
+  const [species, setSpecies] = useState(
+    () => lumberTypes[0] || DEFAULT_LUMBER_TYPES[0]
+  );
   const [source, setSource] = useState('Pallet');
   const [location, setLocation] = useState(activeLocations[0] || 'Workbench');
+  const [description, setDescription] = useState('');
+  const [supplier, setSupplier] = useState('');
   const [length, setLength] = useState('');
   const [width, setWidth] = useState('');
   const [thickness, setThickness] = useState('');
@@ -48,6 +54,13 @@ export default function QuickLog({ onLogged }: Props) {
     }
   }, [activeLocations, location]);
 
+  useEffect(() => {
+    const catalog = lumberTypes?.length ? lumberTypes : [...DEFAULT_LUMBER_TYPES];
+    if (catalog.length && !catalog.some((t) => t.toLowerCase() === species.toLowerCase())) {
+      setSpecies(catalog[0]);
+    }
+  }, [lumberTypes, species]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const l = displayToMm(parseFloat(length), unitSystem);
@@ -70,6 +83,14 @@ export default function QuickLog({ onLogged }: Props) {
     }
 
     const tagId = nextLotTagId(boards, tagPrefixForSpecies(species));
+    const showDescription =
+      source === 'Salvaged' || source === 'Furniture Teardown';
+    const showSupplier = source === 'New' || source === 'Purchased';
+    const notes = showDescription
+      ? description.trim() || undefined
+      : showSupplier
+        ? supplier.trim() || undefined
+        : undefined;
 
     addBoard({
       id: Date.now().toString(),
@@ -83,10 +104,13 @@ export default function QuickLog({ onLogged }: Props) {
       location,
       status: 'active',
       createdAt: new Date().toISOString(),
+      notes,
       defects: defects.length ? [...defects] : undefined,
       defectNotes: defectNotes.trim() || undefined,
     });
     setQuantity('1');
+    setDescription('');
+    setSupplier('');
     setDefects([]);
     setDefectNotes('');
     toast.success(
@@ -113,18 +137,7 @@ export default function QuickLog({ onLogged }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Wood Species</label>
-            <select
-              value={species}
-              onChange={(e) => setSpecies(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
-            >
-              <option value="Pine / Pallet">Pine / Pallet</option>
-              <option value="Plywood">Plywood</option>
-              <option value="Walnut">Walnut</option>
-              <option value="European Oak">European Oak</option>
-              <option value="Maple">Maple</option>
-              <option value="Mahogany">Mahogany</option>
-            </select>
+            <SpeciesSelect value={species} onChange={setSpecies} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Source / Origin</label>
@@ -144,19 +157,58 @@ export default function QuickLog({ onLogged }: Props) {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Storage Location</label>
-          <select
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
-          >
-            {activeLocations.map((loc) => (
-              <option key={loc} value={loc}>
-                {loc}
-              </option>
-            ))}
-          </select>
+        <div
+          className={`grid grid-cols-1 gap-4 ${
+            source === 'Salvaged' ||
+            source === 'Furniture Teardown' ||
+            source === 'New' ||
+            source === 'Purchased'
+              ? 'md:grid-cols-2'
+              : ''
+          }`}
+        >
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Storage Location</label>
+            <select
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
+            >
+              {activeLocations.map((loc) => (
+                <option key={loc} value={loc}>
+                  {loc}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(source === 'Salvaged' || source === 'Furniture Teardown') && (
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                Description <span className="font-normal text-gray-500">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. bedhead, stool leg"
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+              />
+            </div>
+          )}
+          {(source === 'New' || source === 'Purchased') && (
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">
+                Supplier <span className="font-normal text-gray-500">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={supplier}
+                onChange={(e) => setSupplier(e.target.value)}
+                placeholder="e.g. Bunnings, local timber yard"
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+              />
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-3">

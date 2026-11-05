@@ -285,22 +285,12 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
     <div className="space-y-6">
       <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-3 shadow-xl">
         <h2 className="text-lg font-bold text-white flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-orange-500" /> What Can I Build?
+          <Sparkles className="w-5 h-5 text-orange-500" /> What Can I Build?{' '}
+          <span className="text-xs font-semibold text-orange-300/90">(in development)</span>
         </h2>
         <p className="text-xs text-gray-400">
           Your saved projects first, then starter ideas matched to available stock.
         </p>
-        <div className="flex flex-wrap gap-2 text-[10px] font-mono">
-          <span className={`px-2.5 py-1 rounded-lg border ${fitTone('READY')}`}>
-            READY · 2+ matching boards
-          </span>
-          <span className={`px-2.5 py-1 rounded-lg border ${fitTone('ALMOST')}`}>
-            ALMOST · 1 matching board
-          </span>
-          <span className={`px-2.5 py-1 rounded-lg border ${fitTone('NEED STOCK')}`}>
-            NEED STOCK · no matching boards yet
-          </span>
-        </div>
       </div>
 
       <div className="space-y-3">

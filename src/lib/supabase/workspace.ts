@@ -2,6 +2,7 @@ import { getSupabase } from '@/lib/supabase/client';
 import {
   DEFAULT_KERF_MM,
   DEFAULT_LOCATIONS,
+  DEFAULT_LUMBER_TYPES,
   type Board,
   type CutPart,
   type OffcutSettings,
@@ -10,6 +11,7 @@ import {
   type UnitSystem,
 } from '@/lib/store';
 import { normalizeDefects } from '@/lib/defects';
+import { mergeLumberTypesWithStock, normalizeLumberTypes } from '@/lib/lumber-types';
 import {
   pullStorageLocations,
   pushStorageLocations,
@@ -18,6 +20,7 @@ import {
 export type WorkspaceSnapshot = {
   boards: Board[];
   storageLocations: string[];
+  lumberTypes: string[];
   savedProjects: SavedProject[];
   activeProjectName: string;
   activeParts: CutPart[];
@@ -156,12 +159,19 @@ export async function loadWorkspace(userId: string): Promise<WorkspaceResult> {
     (p) => p.name.toLowerCase() === activeProjectName.trim().toLowerCase()
   );
 
+  const boards = (boardsRes.data || []).map((row) => rowToBoard(row as Record<string, unknown>));
+  const lumberTypes = mergeLumberTypesWithStock(
+    Array.isArray(prefs?.lumber_types) ? prefs.lumber_types : [...DEFAULT_LUMBER_TYPES],
+    boards.map((b) => b.species)
+  );
+
   return {
     ok: true,
     message: 'Loaded workshop from Supabase.',
     data: {
-      boards: (boardsRes.data || []).map((row) => rowToBoard(row as Record<string, unknown>)),
+      boards,
       storageLocations: locs.locations.length ? locs.locations : [...DEFAULT_LOCATIONS],
+      lumberTypes,
       savedProjects,
       activeProjectName,
       activeParts: Array.isArray(prefs?.active_parts) ? (prefs.active_parts as CutPart[]) : [],
@@ -280,10 +290,15 @@ export async function savePreferences(
     | 'completedOperations'
     | 'defaultKerfMm'
     | 'activeKerfMm'
+    | 'lumberTypes'
   >
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, message: 'Supabase is not configured yet.' };
+
+  const lumberTypes = normalizeLumberTypes(
+    snapshot.lumberTypes?.length ? snapshot.lumberTypes : [...DEFAULT_LUMBER_TYPES]
+  );
 
   const basePrefs = {
     user_id: userId,
@@ -296,21 +311,46 @@ export async function savePreferences(
     updated_at: new Date().toISOString(),
   };
 
-  const withKerf = {
+  const withKerfAndLumber = {
     ...basePrefs,
     default_kerf_mm: snapshot.defaultKerfMm,
     active_kerf_mm: snapshot.activeKerfMm,
+    lumber_types: lumberTypes,
   };
 
   const first = await supabase
     .from('user_preferences')
-    .upsert(withKerf, { onConflict: 'user_id' });
+    .upsert(withKerfAndLumber, { onConflict: 'user_id' });
   if (!first.error) return { ok: true };
 
+  const msg = first.error.message || '';
+  const missingLumber = /lumber_types/i.test(msg) || /schema cache/i.test(msg);
+  if (missingLumber) {
+    const withKerfOnly = {
+      ...basePrefs,
+      default_kerf_mm: snapshot.defaultKerfMm,
+      active_kerf_mm: snapshot.activeKerfMm,
+    };
+    const second = await supabase
+      .from('user_preferences')
+      .upsert(withKerfOnly, { onConflict: 'user_id' });
+    if (!second.error) return { ok: true };
+
+    const missingKerf =
+      /kerf_mm|default_kerf|active_kerf/i.test(second.error.message) ||
+      /schema cache/i.test(second.error.message);
+    if (!missingKerf) return { ok: false, message: second.error.message };
+
+    const { error } = await supabase
+      .from('user_preferences')
+      .upsert(basePrefs, { onConflict: 'user_id' });
+    if (error) return { ok: false, message: error.message };
+    return { ok: true };
+  }
+
   const missingKerf =
-    /kerf_mm|default_kerf|active_kerf/i.test(first.error.message) ||
-    /schema cache/i.test(first.error.message);
-  if (!missingKerf) return { ok: false, message: first.error.message };
+    /kerf_mm|default_kerf|active_kerf/i.test(msg) || /schema cache/i.test(msg);
+  if (!missingKerf) return { ok: false, message: msg };
 
   const { error } = await supabase
     .from('user_preferences')

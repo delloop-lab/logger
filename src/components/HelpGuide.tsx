@@ -7,18 +7,17 @@ function HelpShot({
   src,
   alt,
   caption,
+  imgClassName = 'block w-full h-auto bg-[#121417]',
 }: {
   src: string;
   alt: string;
   caption?: string;
+  /** Optional image sizing (e.g. height-limited stock tag). */
+  imgClassName?: string;
 }) {
   return (
     <figure className="m-0 overflow-hidden rounded-xl border border-gray-700 bg-[#121417]">
-      <img
-        src={src}
-        alt={alt}
-        className="block w-full h-auto bg-[#121417]"
-      />
+      <img src={src} alt={alt} className={imgClassName} />
       {caption ? (
         <figcaption className="px-3 py-2 text-[11px] text-gray-500 border-t border-gray-800">
           {caption}
@@ -38,9 +37,9 @@ export default function HelpGuide({
   return (
     <div className="space-y-6 text-sm text-gray-300 leading-relaxed">
       <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-100 text-xs font-medium">
-        <strong className="font-black tracking-wide">BETA</strong>; Logger (formally TimberVault) is
-        a beta product and is being updated all the time. Screens and workflows may change between
-        sessions. You are on <span className="font-mono text-amber-200">{version}</span>.
+        <strong className="font-black tracking-wide">BETA</strong>; Logger is a beta product and is
+        being updated all the time. Screens and workflows may change between sessions. You are on{' '}
+        <span className="font-mono text-amber-200">{version}</span>.
       </div>
 
       <div className="rounded-xl border border-gray-700 bg-[#121417] px-4 py-3 text-xs text-gray-300">
@@ -100,15 +99,19 @@ export default function HelpGuide({
         <div className="space-y-2">
           <h4 className="font-bold text-gray-100">Quick Log</h4>
           <p className="text-xs text-gray-400">
-            Fast way to add new timber to stock. Enter species, source, length / width / thickness,
-            quantity, and storage location. Optionally mark defects (warp, knot, split, and so on)
-            plus notes. Logger assigns a lot tag id automatically (based on species). After
-            you save, the lot appears in Inventory and on the Dashboard.
+            Fast way to add new timber to stock. Choose species from your lumber types, set source,
+            storage location, dimensions, and quantity. Source opens an optional field beside
+            location: <strong className="text-gray-200">Description</strong> (for Salvaged or
+            Furniture Teardown, e.g. bedhead or stool leg) or{' '}
+            <strong className="text-gray-200">Supplier</strong> (for New or Purchased). Optionally
+            mark defects (warp, knot, split, and so on) plus defect notes. Logger assigns a lot tag
+            id automatically (based on species). After you save, the lot appears in Inventory and on
+            the Dashboard.
           </p>
           <HelpShot
             src="/help/help-tab-quick-log.png"
-            alt="Logger Quick Log form for adding a new timber lot"
-            caption="Quick Log: add stock in one pass"
+            alt="Logger Quick Log form with species, source, location, and optional description or supplier"
+            caption="Quick Log: species, source, location, optional description or supplier"
           />
         </div>
 
@@ -132,10 +135,11 @@ export default function HelpGuide({
         <div className="space-y-2">
           <h4 className="font-bold text-gray-100">Projects &amp; Cuts</h4>
           <p className="text-xs text-gray-400">
-            Plan a build end to end. Name or open a project, add parts (name, species, size,
-            quantity), set kerf and cutting strategy, then generate nested cutting sheets against
-            available boards. Review shop drawings, save or pause projects when stock is short,
-            resume later, and apply cuts so remnants / finished parts update Inventory.
+            Plan a build end to end. Name or open a project, add parts (name, species from your
+            lumber types, size, quantity), set kerf and cutting strategy, then generate nested
+            cutting sheets against available boards. Review shop drawings, save or pause projects
+            when stock is short, resume later, and apply cuts so remnants / finished parts update
+            Inventory.
           </p>
           <HelpShot
             src="/help/help-tab-projects-cuts.png"
@@ -145,17 +149,20 @@ export default function HelpGuide({
         </div>
 
         <div className="space-y-2">
-          <h4 className="font-bold text-gray-100">What Can I Build?</h4>
+          <h4 className="font-bold text-gray-100">
+            What Can I Build?{' '}
+            <span className="font-semibold text-orange-300/90">(in development)</span>
+          </h4>
           <p className="text-xs text-gray-400">
             Idea finder for the timber you already have. Compares project templates and your saved
-            projects to available boards by species and size. Shows READY / ALMOST / NEED STOCK so
-            you can pick a realistic next build, then open it in Projects &amp; Cuts to generate a
-            cut list.
+            projects to available boards by species and size so you can pick a realistic next
+            build, then open it in Projects &amp; Cuts to generate a cut list. This area is still
+            in development.
           </p>
           <HelpShot
             src="/help/help-tab-what-can-i-build.png"
             alt="Logger What Can I Build tab matching projects to stock"
-            caption="What Can I Build?: READY / ALMOST / NEED STOCK"
+            caption="What Can I Build? (in development)"
           />
         </div>
 
@@ -178,14 +185,15 @@ export default function HelpGuide({
           <h4 className="font-bold text-gray-100">Settings</h4>
           <p className="text-xs text-gray-400">
             Workshop preferences: metric (mm) or imperial (inches), default saw kerf for new
-            projects, minimum size that counts as a reusable offcut, and your list of storage
-            locations (rack, workbench, shed, and so on). Also shows who is signed in and tools to
-            reset workshop data if you need a clean start.
+            projects, minimum size that counts as a reusable offcut, lumber types (add or rename
+            species such as Birch Plywood or Jarrah), and your list of storage locations (rack,
+            workbench, shed, and so on). Also shows who is signed in and tools to reset workshop
+            data if you need a clean start.
           </p>
           <HelpShot
             src="/help/help-tab-settings.png"
-            alt="Logger Settings tab for units, kerf, offcuts, and locations"
-            caption="Settings: units, kerf, offcut rules, locations (account email blurred)"
+            alt="Logger Settings tab for units, kerf, offcuts, lumber types, and locations"
+            caption="Settings: kerf, offcut rules, lumber types (add/rename), locations"
           />
         </div>
       </section>
@@ -198,6 +206,7 @@ export default function HelpGuide({
           src="/help/workshop-stock-tag.jpg"
           alt="Logger Stock Tag stapled to the end of a board, showing QR code, tag id, species, dimensions, and location"
           caption="Example: a printed Stock Tag on a board end. Scan the QR in Inventory / QR Scanner to look up the lot."
+          imgClassName="block h-44 sm:h-56 w-auto max-w-full object-contain bg-[#121417]"
         />
         <ul className="list-disc pl-5 space-y-1.5 text-xs">
           <li>
@@ -236,14 +245,31 @@ export default function HelpGuide({
             </p>
           </div>
           <div>
+            <p className="font-bold text-gray-100">Can I add my own lumber types?</p>
+            <p className="text-gray-400 mt-0.5">
+              Yes. In Settings, add or rename types such as Birch Plywood or Jarrah. They appear in
+              Quick Log and Projects &amp; Cuts.
+            </p>
+          </div>
+          <div>
+            <p className="font-bold text-gray-100">
+              What are Description and Supplier on Quick Log?
+            </p>
+            <p className="text-gray-400 mt-0.5">
+              Optional fields beside Storage Location. Salvaged or Furniture Teardown shows
+              Description (what the piece was). New or Purchased shows Supplier (where you bought
+              it).
+            </p>
+          </div>
+          <div>
             <p className="font-bold text-gray-100">How do I report a problem?</p>
             <p className="text-gray-400 mt-0.5">
               Use Contact in the footer:{' '}
               <a
-                href="mailto:silvervirtual@gmail.com"
+                href="mailto:lou@schillaci.me"
                 className="text-orange-400 hover:text-orange-300"
               >
-                silvervirtual@gmail.com
+                lou@schillaci.me
               </a>
               .
             </p>

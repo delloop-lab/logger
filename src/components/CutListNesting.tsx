@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useAppStore, CutPart } from '@/lib/store';
+import { useAppStore, CutPart, DEFAULT_LUMBER_TYPES } from '@/lib/store';
 import { displayToMm, formatDim, mmToDisplay, unitLabel } from '@/lib/units';
 import {
   STRATEGY_META,
@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import CutListDrawing from '@/components/CutListDrawing';
+import SpeciesSelect from '@/components/SpeciesSelect';
 import { notify, toast } from '@/lib/notify';
 
 async function offerStockGapChoice(stockGaps: string[]): Promise<'pause' | 'generate' | 'cancel'> {
@@ -57,7 +58,9 @@ export default function CutListNesting() {
   const setActiveStrategy = store.setActiveStrategy;
 
   const [partName, setPartName] = useState('');
-  const [woodSpecies, setWoodSpecies] = useState('Pine / Pallet');
+  const [woodSpecies, setWoodSpecies] = useState(
+    () => store.lumberTypes?.[0] || DEFAULT_LUMBER_TYPES[0]
+  );
   const [length, setLength] = useState('');
   const [width, setWidth] = useState('');
   const [thickness, setThickness] = useState('');
@@ -659,17 +662,7 @@ export default function CutListNesting() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Wood species</label>
-                  <select
-                    value={woodSpecies}
-                    onChange={(e) => setWoodSpecies(e.target.value)}
-                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
-                  >
-                    <option value="Pine / Pallet">Pine / Pallet</option>
-                    <option value="Plywood">Plywood</option>
-                    <option value="Walnut">Walnut</option>
-                    <option value="European Oak">European Oak</option>
-                    <option value="Maple">Maple</option>
-                  </select>
+                  <SpeciesSelect value={woodSpecies} onChange={setWoodSpecies} />
                 </div>
               </div>
 

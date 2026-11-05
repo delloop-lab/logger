@@ -6,7 +6,14 @@ import {
 } from '@/lib/cutting-engine';
 import { createDemoWorkspace } from '@/lib/demo-workspace';
 import { escapeTag, resolveUnitsIssued } from '@/lib/inventory-lots';
+import {
+  DEFAULT_LUMBER_TYPES,
+  mergeLumberTypesWithStock,
+  normalizeLumberTypes,
+} from '@/lib/lumber-types';
 import type { UnitSystem } from '@/lib/units';
+
+export { DEFAULT_LUMBER_TYPES } from '@/lib/lumber-types';
 
 export type BoardStatus = 'active' | 'consumed' | 'allocated';
 export type BoardClassification = 'finished_piece' | 'reusable_offcut' | 'waste';
@@ -147,6 +154,8 @@ export interface ConfirmationPayload {
 export type WorkspaceData = {
   boards: Board[];
   storageLocations: string[];
+  /** Editable lumber / species catalog for Quick Log and project parts */
+  lumberTypes: string[];
   savedProjects: SavedProject[];
   activeProjectName: string;
   activeParts: CutPart[];
@@ -206,6 +215,12 @@ interface AppState extends WorkspaceData {
   removeBoard: (id: string) => void;
   updateBoard: (board: Board) => void;
   updateStorageLocations: (locations: string[]) => void;
+  updateLumberTypes: (types: string[]) => void;
+  /** Rename a lumber type and update boards / open parts that use the old label. */
+  renameLumberType: (
+    from: string,
+    to: string
+  ) => { ok: true } | { ok: false; message: string };
   updateOffcutSettings: (settings: OffcutSettings) => void;
   setUnitSystem: (system: UnitSystem) => void;
   setDefaultKerfMm: (mm: number) => void;
@@ -327,6 +342,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
 const FRESH_STATE: WorkspaceData = {
   boards: [],
   storageLocations: [...DEFAULT_LOCATIONS],
+  lumberTypes: [...DEFAULT_LUMBER_TYPES],
   activeProjectName: 'New Project',
   activeParts: [],
   savedProjects: [],
@@ -401,6 +417,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
   hydrateFromCloud: (data) =>
     set({
       ...data,
+      lumberTypes: mergeLumberTypesWithStock(
+        data.lumberTypes,
+        (data.boards || []).map((b) => b.species)
+      ),
       defaultKerfMm: data.defaultKerfMm ?? DEFAULT_KERF_MM,
       activeKerfMm: data.activeKerfMm ?? data.defaultKerfMm ?? DEFAULT_KERF_MM,
       activeCuttingPlan: data.activeCuttingPlan ?? null,
@@ -463,6 +483,50 @@ export const useAppStore = create<AppState>()((set, get) => ({
       storageLocations: locations,
       cloudRevision: state.cloudRevision + 1,
     })),
+
+  updateLumberTypes: (types) =>
+    set((state) => ({
+      lumberTypes: normalizeLumberTypes(types),
+      cloudRevision: state.cloudRevision + 1,
+    })),
+
+  renameLumberType: (from, to) => {
+    const oldName = String(from || '').trim();
+    const newName = String(to || '').trim().replace(/\s+/g, ' ');
+    if (!oldName) return { ok: false, message: 'Nothing to rename.' };
+    if (!newName) return { ok: false, message: 'Enter a lumber type name.' };
+    if (oldName.toLowerCase() === newName.toLowerCase() && oldName !== newName) {
+      // Casing-only change — still apply
+    } else if (oldName.toLowerCase() === newName.toLowerCase()) {
+      return { ok: true };
+    }
+
+    const state = get();
+    const clash = state.lumberTypes.some(
+      (t) => t.toLowerCase() === newName.toLowerCase() && t.toLowerCase() !== oldName.toLowerCase()
+    );
+    if (clash) return { ok: false, message: 'That lumber type already exists.' };
+
+    set((s) => ({
+      lumberTypes: normalizeLumberTypes(
+        s.lumberTypes.map((t) => (t.toLowerCase() === oldName.toLowerCase() ? newName : t))
+      ),
+      boards: s.boards.map((b) =>
+        b.species.toLowerCase() === oldName.toLowerCase() ? { ...b, species: newName } : b
+      ),
+      activeParts: s.activeParts.map((p) =>
+        p.species.toLowerCase() === oldName.toLowerCase() ? { ...p, species: newName } : p
+      ),
+      savedProjects: s.savedProjects.map((proj) => ({
+        ...proj,
+        parts: proj.parts.map((p) =>
+          p.species.toLowerCase() === oldName.toLowerCase() ? { ...p, species: newName } : p
+        ),
+      })),
+      cloudRevision: s.cloudRevision + 1,
+    }));
+    return { ok: true };
+  },
 
   updateOffcutSettings: (settings) =>
     set((state) => ({
@@ -1151,6 +1215,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
       storageLocations: state.storageLocations.length
         ? state.storageLocations
         : [...DEFAULT_LOCATIONS],
+      lumberTypes: state.lumberTypes.length
+        ? state.lumberTypes
+        : [...DEFAULT_LUMBER_TYPES],
       offcutSettings: state.offcutSettings,
       unitSystem: state.unitSystem,
       defaultKerfMm: state.defaultKerfMm,

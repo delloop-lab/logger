@@ -5,6 +5,8 @@ import { useAppStore } from '@/lib/store';
 import { PlusCircle } from 'lucide-react';
 import { toast } from '@/lib/notify';
 import { nextLotTagId, tagPrefixForSpecies } from '@/lib/tags';
+import SpeciesSelect from '@/components/SpeciesSelect';
+import { DEFAULT_LUMBER_TYPES } from '@/lib/store';
 
 export default function InventoryView() {
   const store = useAppStore();
@@ -20,7 +22,9 @@ export default function InventoryView() {
     'Under Cabinet'
   ]).filter(loc => loc && loc.trim() !== '');
 
-  const [species, setSpecies] = useState('Pine/Pallet');
+  const [species, setSpecies] = useState(
+    () => store?.lumberTypes?.[0] || DEFAULT_LUMBER_TYPES[0]
+  );
   const [source, setSource] = useState('Pallet');
   const [length, setLength] = useState('450');
   const [width, setWidth] = useState('75');
@@ -70,18 +74,7 @@ export default function InventoryView() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1">Wood Species</label>
-              <select
-                value={species}
-                onChange={e => setSpecies(e.target.value)}
-                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold"
-              >
-                <option value="Pine/Pallet">Pine / Pallet</option>
-                <option value="Plywood">Plywood</option>
-                <option value="European Oak">European Oak</option>
-                <option value="Walnut">Walnut</option>
-                <option value="Maple">Maple</option>
-                <option value="Cherry">Cherry</option>
-              </select>
+              <SpeciesSelect value={species} onChange={setSpecies} />
             </div>
 
             <div>

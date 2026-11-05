@@ -112,6 +112,7 @@ export default function CloudSync() {
       const result = await saveWorkspace(state.cloudUserId, {
         boards: state.boards,
         storageLocations: state.storageLocations,
+        lumberTypes: state.lumberTypes,
         savedProjects: state.savedProjects,
         activeProjectName: state.activeProjectName,
         activeParts: state.activeParts,
