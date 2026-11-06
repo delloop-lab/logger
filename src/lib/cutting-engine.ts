@@ -294,6 +294,9 @@ export function speciesMatches(required: string, boardSpecies: string): boolean 
   if (!a || !b) return false;
   if (a === b) return true;
   if (a.includes('pine') && b.includes('pine')) return true;
+  if ((a.includes('ply') || a.includes('birch')) && (b.includes('ply') || b.includes('birch'))) {
+    return true;
+  }
   if (a.includes('any') || b.includes('any')) return true;
   return false;
 }

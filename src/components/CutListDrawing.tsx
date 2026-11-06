@@ -885,211 +885,115 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
           return (
             <div
               key={`${step.boardTag}-${step.stepIndex}`}
-              className="cut-sheet-page bg-white text-zinc-900 border-2 border-zinc-900 p-6 rounded-lg shadow-md space-y-5"
+              className="cut-sheet-page bg-white text-zinc-900 border-2 border-zinc-900 p-5 rounded-lg shadow-md space-y-4"
             >
-              <div className="hidden print:flex items-center justify-between text-[11px] font-mono text-zinc-600 border-b border-zinc-300 pb-2 mb-1">
-                <span>Logger cutting sheet</span>
-                <span>{activeProjectName}</span>
-              </div>
-              <div className="border-b-2 border-zinc-900 pb-3 space-y-2">
-                <div className="flex justify-between items-start gap-3 flex-wrap">
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="bg-zinc-900 text-white font-mono text-sm px-3 py-1 font-bold">
-                        STEP {step.stepIndex} OF {physicalSteps.length}
-                      </span>
-                      <span className="font-mono text-xs text-zinc-500 uppercase tracking-wide">
-                        {activeProjectName}
-                      </span>
-                    </div>
-                    <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 leading-tight">
-                      {pieceHeadline}
-                    </h2>
-                    <p className="text-sm font-mono text-zinc-600 uppercase tracking-wide">
-                      {stepSubtitle}
-                    </p>
-                  </div>
-                  {isCompleted && (
-                    <span className="bg-emerald-700 text-white text-xs px-3 py-1 font-bold rounded flex items-center gap-1 shrink-0">
-                      <CheckCircle2 className="w-4 h-4" /> COMPLETED
+              {/* Header Bar */}
+              <div className="border-b-2 border-zinc-900 pb-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="bg-zinc-900 text-white font-mono text-xs sm:text-sm px-2.5 py-1 font-bold uppercase tracking-wide">
+                      STEP {step.stepIndex} OF {physicalSteps.length}:{' '}
+                      {isBlank
+                        ? 'BLANK CROSSCUT'
+                        : isRip && isFinishedStep
+                          ? 'RIP (FINISHED PIECE)'
+                          : isRip
+                            ? 'RIP STRIP'
+                            : 'CROSSCUT'}
                     </span>
-                  )}
+                    {isCompleted && (
+                      <span className="bg-emerald-700 text-white text-xs px-2.5 py-1 font-bold rounded flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> COMPLETED
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight text-zinc-900 leading-tight pt-0.5">
+                    {pieceHeadline}
+                  </h2>
                 </div>
+                <span className="px-3 py-1 rounded border border-zinc-300 bg-zinc-100 font-mono text-xs font-bold text-zinc-800 uppercase tracking-wide shrink-0">
+                  {activeProjectName}
+                </span>
               </div>
 
-              {isBlank && (
-                <div className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-[12px] text-sky-950 font-sans leading-snug">
-                  <strong>One stock board, two saw setups.</strong> This step only crosscuts a short
-                  blank. The next step rips the finished part from that blank — it is not a second
-                  board from inventory. The long leftover (
-                  {formatDim(step.remLen, unitSystem)} × {formatDim(step.remWid, unitSystem)}) goes
-                  back on the rack whole.
-                </div>
-              )}
-              {isRip && isFinishedStep && (
-                <div className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-[12px] text-sky-950 font-sans leading-snug">
-                  <strong>Still the same lot ({nestTag}).</strong> Pull the short blank from the
-                  previous blank-cut step — length in hand is{' '}
-                  {formatDim(step.stockLen, unitSystem)}, not the long rack offcut.
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
-                <div className="bg-zinc-50 p-4 border border-zinc-300 rounded space-y-1">
-                  <div className="font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-300 pb-1 mb-2">
-                    <Box className="w-4 h-4 text-orange-600" />{' '}
-                    {isBlank
-                      ? 'WHAT TO PULL (PARENT BOARD):'
-                      : isRip && isFinishedStep
-                        ? 'WHAT TO PULL (BLANK IN HAND):'
-                        : 'WHAT TO PULL (STOCK):'}
-                  </div>
-                  <div>
-                    Tag Ref: <strong className="text-orange-700">{pullTag}</strong>
-                  </div>
-                  {!isFirstCutOnBoard && (
-                    <div className="text-[11px] text-emerald-700 font-sans">
-                      Same lot {nestTag} — not a new board from the rack.
-                    </div>
-                  )}
-                  <div>
-                    Species: <strong className="text-zinc-900">{step.species}</strong>
-                  </div>
-                  <div>
-                    Location: <strong className="text-zinc-900">{step.location}</strong>
-                  </div>
-                  <div>
-                    {isBlank ? 'Parent board size' : isRip ? 'Piece in hand now' : 'Board in hand'}:{' '}
-                    <strong className="text-zinc-900">
+              {/* Single Combined Action Card: PULL -> CUT -> OFF-CUT / TAG */}
+              <div className="bg-zinc-50 border border-zinc-300 rounded-lg p-3.5 font-mono text-xs space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 pb-2.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-zinc-900">
+                    <span className="inline-flex items-center gap-1 font-bold text-zinc-600 uppercase">
+                      <Box className="w-3.5 h-3.5 text-orange-600" /> PULL:
+                    </span>
+                    <strong className="text-orange-700 text-sm">{pullTag}</strong>
+                    <span className="text-zinc-700">({step.species})</span>
+                    <span className="text-zinc-500">@</span>
+                    <strong className="text-zinc-900">{step.location}</strong>
+                    <span className="px-2 py-0.5 bg-white border border-zinc-300 rounded text-zinc-900 font-bold">
                       {formatDimsLWT(inHandLen, inHandWid, step.thickness, unitSystem)}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-zinc-500">
+                    Kerf: <strong className="text-zinc-800">{formatDim(step.kerf, unitSystem)}</strong>
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+                  <div className="flex-1 bg-white border-2 border-zinc-900 rounded-md px-3 py-2 flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 font-bold text-zinc-700 uppercase">
+                      <Scissors className="w-3.5 h-3.5 text-emerald-600" /> CUT:
+                    </span>
+                    <strong className="text-zinc-900 text-sm">
+                      {isBlank
+                        ? `${formatDim(step.cutLen, unitSystem)} Blank (${formatDim(step.cutLen, unitSystem)} × ${formatDim(step.cutWid, unitSystem)})`
+                        : isRip && !isFinishedStep
+                          ? `${formatDim(step.cutWid, unitSystem)} Rip Strip (${formatDim(step.cutLen, unitSystem)} × ${formatDim(step.cutWid, unitSystem)})`
+                          : `${formatDim(step.cutLen, unitSystem)} × ${formatDim(step.cutWid, unitSystem)} (${step.partName})`}
                     </strong>
                   </div>
-                  {!isBlank && !isRip && step.remLen > 0.5 && (
-                    <div className="text-[11px] text-zinc-600 font-sans pt-1">
-                      After this crosscut, strip tip left{' '}
-                      <strong>
-                        {formatDim(step.remLen, unitSystem)} × {formatDim(step.remWid || inHandWid, unitSystem)}
+
+                  <span className="hidden sm:inline font-bold text-zinc-400 text-base select-none">
+                    ===&gt;
+                  </span>
+
+                  <div className="flex-1 bg-white border border-zinc-300 rounded-md px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-zinc-600 uppercase">
+                        {isBlank
+                          ? 'OFF-CUT TO RACK: '
+                          : isRip
+                            ? 'SET ASIDE: '
+                            : 'REMAINDER: '}
+                      </span>
+                      <strong className="text-zinc-900">
+                        {isRip && step.edgeWid > 0.5
+                          ? `${formatDim(step.edgeLen || inHandLen, unitSystem)} × ${formatDim(step.edgeWid, unitSystem)}`
+                          : step.remLen > 0.5
+                            ? `${formatDim(step.remLen, unitSystem)} × ${formatDim(step.remWid || inHandWid, unitSystem)}`
+                            : 'None'}
                       </strong>
-                      .
                     </div>
-                  )}
-                  {isBlank && step.remLen > 0.5 && (
-                    <div className="text-[11px] text-zinc-600 font-sans pt-1">
-                      After this crosscut, rack the long leftover{' '}
-                      <strong>
-                        {formatDim(step.remLen, unitSystem)} × {formatDim(step.remWid, unitSystem)}
-                      </strong>{' '}
-                      (that length is scrap/offcut to keep whole — not the blank you rip next).
-                    </div>
-                  )}
-                  {(() => {
-                    const lot =
-                      findSourceLot(pullTag, boards) || findSourceLot(step.boardTag, boards);
-                    const label = formatDefectsList(lot?.defects, lot?.defectNotes);
-                    if (!label) return null;
-                    return (
-                      <div className="mt-2 rounded border border-amber-400 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 font-sans leading-snug">
-                        <span className="font-bold uppercase tracking-wide">Defects: </span>
-                        {label}. Plan cuts and assembly around these.
-                      </div>
-                    );
-                  })()}
+                    {nextRemLabel && (
+                      <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-[11px]">
+                        Tag: {nextRemLabel}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="bg-zinc-50 p-4 border border-zinc-300 rounded space-y-1">
-                  <div className="font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-300 pb-1 mb-2">
-                    <Scissors className="w-4 h-4 text-emerald-600" /> WHAT TO CUT:
-                  </div>
-                  {isBlank ? (
-                    <>
-                      <div>
-                        Operation:{' '}
-                        <strong className="text-zinc-900">
-                          Crosscut a short blank only (no finished part yet)
-                        </strong>
-                      </div>
-                      <div>
-                        Blank you keep for the next step:{' '}
-                        <strong className="text-zinc-900">
-                          {formatDim(step.cutLen, unitSystem)} × {formatDim(step.cutWid, unitSystem)}
-                        </strong>
-                      </div>
-                      <div>
-                        Long leftover to rack (do not rip this):{' '}
-                        <strong className="text-zinc-900">
-                          {formatDim(step.remLen, unitSystem)} × {formatDim(step.remWid, unitSystem)}
-                        </strong>
-                      </div>
-                    </>
-                  ) : isRip ? (
-                    <>
-                      {isFinishedStep && (
-                        <div>
-                          Target Part: <strong className="text-zinc-900">{step.partName}</strong>
-                        </div>
-                      )}
-                      <div>
-                        Operation:{' '}
-                        <strong className="text-zinc-900">
-                          {isFinishedStep
-                            ? `Rip finished piece (${formatDim(step.cutLen, unitSystem)} × ${formatDim(step.cutWid, unitSystem)}) from the short blank`
-                            : 'Rip along the long edge (one pass)'}
-                        </strong>
-                      </div>
-                      <div>
-                        Fence / strip width:{' '}
-                        <strong className="text-zinc-900">{formatDim(step.cutWid, unitSystem)}</strong>
-                      </div>
-                      {isFinishedStep && step.edgeWid > 0.5 && (
-                        <div>
-                          Remaining blank set aside:{' '}
-                          <strong className="text-zinc-900">
-                            {formatDim(step.edgeLen, unitSystem)} × {formatDim(step.edgeWid, unitSystem)}
-                          </strong>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        Target Part: <strong className="text-zinc-900">{step.partName}</strong>
-                      </div>
-                      <div>
-                        Cut size:{' '}
-                        <strong className="text-zinc-900">
-                          {formatDim(step.cutLen, unitSystem)} × {formatDim(step.cutWid, unitSystem)}
-                          {step.rotated ? ' (rotated)' : ''}
-                        </strong>
-                      </div>
-                      <div>
-                        Position on board:{' '}
-                        <strong className="text-zinc-900">
-                          X: {formatDim(step.posX, unitSystem)}, Y: {formatDim(step.posY, unitSystem)}
-                        </strong>
-                      </div>
-                    </>
-                  )}
-                  <div>
-                    Saw Kerf: <strong className="text-zinc-900">{formatDim(step.kerf, unitSystem)}</strong>
-                  </div>
-                  <div className="pt-2 mt-2 border-t border-zinc-300 text-[11px] text-zinc-600 font-sans">
-                    {isBlank
-                      ? 'Blank-first keeps one long continuous offcut instead of ripping the full board length.'
-                      : isRip
-                        ? 'Rip the blank in hand; odd width is set aside.'
-                        : isFirstCutOnBoard
-                          ? 'Crosscut from the strip, take this rectangle; leftover on the strip stays a shorter rectangle.'
-                          : 'Hatch = removed. Cut letter = this crosscut. Dark gap = kerf.'}
-                    {nextRemLabel ? (
-                      <>
-                        {' '}
-                        Label leftover stock <strong className="text-emerald-700">{nextRemLabel}</strong>.
-                      </>
-                    ) : null}
-                  </div>
-                </div>
+                {(() => {
+                  const lot =
+                    findSourceLot(pullTag, boards) || findSourceLot(step.boardTag, boards);
+                  const label = formatDefectsList(lot?.defects, lot?.defectNotes);
+                  if (!label) return null;
+                  return (
+                    <div className="rounded border border-amber-400 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-950 font-sans leading-snug">
+                      <span className="font-bold uppercase tracking-wide">Defects: </span>
+                      {label}
+                    </div>
+                  );
+                })()}
               </div>
 
+              {/* Shop Drawing Canvas */}
               <div className="border-2 border-stone-900 bg-white p-1 print:border-black">
                 <CutMapWorkshop
                   step={step}
@@ -1102,53 +1006,17 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                 />
               </div>
 
-              <div className="border-t border-zinc-300 pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="text-xs font-mono text-zinc-700 space-y-0.5">
-                  {isBlank ? (
-                    <>
-                      <div>
-                        • Crosscut a {formatDim(step.cutLen, unitSystem)} blank from the board.
-                      </div>
-                      <div>
-                        • Leaves {formatDim(step.remLen, unitSystem)} continuous offcut, no finished
-                        part yet.
-                      </div>
-                    </>
-                  ) : isRip ? (
-                    isFinishedStep ? (
-                      <>
-                        <div>
-                          • Rip finished piece {partOrdinal} of {finishedSteps.length} from the short blank.
-                        </div>
-                        <div>
-                          • Yields: <strong>{step.partName}</strong> (
-                          {formatDim(step.cutLen, unitSystem)} × {formatDim(step.cutWid, unitSystem)}
-                          ).
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          • Rip a {formatDim(step.cutWid, unitSystem)} strip, set the odd piece aside.
-                        </div>
-                        <div>
-                          • No finished part yet, crosscuts after this add inventory pieces.
-                        </div>
-                      </>
-                    )
-                  ) : (
-                    <>
-                      <div>
-                        • Crosscut finished piece {partOrdinal} of {finishedSteps.length}.
-                      </div>
-                      <div>
-                        • Yields: <strong>{step.partName}</strong> (
-                        {formatDim(step.cutLen, unitSystem)} × {formatDim(step.cutWid, unitSystem)}
-                        ).
-                      </div>
-                    </>
-                  )}
-                </div>
+              {/* Bottom Action Bar */}
+              <div className="border-t border-zinc-300 pt-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-100 border border-zinc-300 font-mono text-xs font-bold text-zinc-800">
+                  {isBlank
+                    ? `Crosscut at ${formatDim(step.cutLen, unitSystem)} · Keep ${formatDim(step.remLen, unitSystem)} offcut whole`
+                    : isRip && isFinishedStep
+                      ? `Rip ${formatDim(step.cutWid, unitSystem)} finished piece (${step.partName}) · Piece ${partOrdinal}/${finishedSteps.length}`
+                      : isRip
+                        ? `Rip ${formatDim(step.cutWid, unitSystem)} strip along length`
+                        : `Crosscut ${formatDim(step.cutLen, unitSystem)} (${step.partName}) · Piece ${partOrdinal}/${finishedSteps.length}`}
+                </span>
 
                 <div className="print:hidden w-full sm:w-auto">
                   {!isCompleted && (

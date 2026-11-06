@@ -10,8 +10,8 @@ import {
   type SavedProject,
 } from '@/lib/store';
 import { speciesMatches } from '@/lib/cutting-engine';
-import { Sparkles, ArrowRight, Trophy, Pencil, Check, X, FolderOpen } from 'lucide-react';
-import { toast } from '@/lib/notify';
+import { Sparkles, ArrowRight, Trophy, Pencil, Check, X, FolderOpen, Trash2 } from 'lucide-react';
+import { notify, toast } from '@/lib/notify';
 import { formatDim, formatDimsLWT, type UnitSystem } from '@/lib/units';
 
 interface ProjectMatcherProps {
@@ -145,6 +145,7 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
   const syncActiveProjectToLibrary = useAppStore((s) => s.syncActiveProjectToLibrary);
   const openProjectWithCuttingSheets = useAppStore((s) => s.openProjectWithCuttingSheets);
   const restoreRecoveredProjects = useAppStore((s) => s.restoreRecoveredProjects);
+  const deleteProject = useAppStore((s) => s.deleteProject);
   const defaultKerfMm = useAppStore((s) => s.defaultKerfMm);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -156,13 +157,18 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
     syncActiveProjectToLibrary();
   }, [syncActiveProjectToLibrary, savedProjects.length, completedOperations.length]);
 
-  // After a cloud wipe, merge any missing known workshop projects back (even if 1 open project already pushed itself in)
-  React.useEffect(() => {
-    const result = restoreRecoveredProjects();
-    if (result.added > 0) {
-      toast.success(`Restored ${result.added} workshop project${result.added === 1 ? '' : 's'}.`);
-    }
-  }, [restoreRecoveredProjects]);
+  const handleDeleteProjectCard = async (project: SavedProject) => {
+    const ok = await notify.confirm({
+      title: 'Delete project?',
+      message: `Delete "${project.name}" from your saved projects? This cannot be undone.`,
+      confirmLabel: 'Delete project',
+      danger: true,
+    });
+    if (!ok) return;
+    deleteProject(project.id);
+    if (editingId === project.id) setEditingId(null);
+    toast.error(`Deleted project "${project.name}".`);
+  };
 
   const activeBoards = boards.filter((b) => b.status === 'active');
 
@@ -403,6 +409,15 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
                         >
                           {status}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProjectCard(project)}
+                          className="p-1.5 rounded-lg bg-gray-800/80 hover:bg-red-950/70 text-gray-400 hover:text-red-300 border border-gray-700/80 hover:border-red-800/60 cursor-pointer transition-colors"
+                          title={`Delete ${project.name}`}
+                          aria-label={`Delete ${project.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                     <h3 className="text-base font-bold text-white">{project.name}</h3>

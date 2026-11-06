@@ -146,6 +146,11 @@ export default function HelpGuide({
             alt="Logger Projects and Cuts tab with saved projects and cut list steps"
             caption="Projects & Cuts: name, parts, save, generate sheets"
           />
+          <HelpShot
+            src="/help/help-cutting-sheet.png"
+            alt="Logger workshop cutting sheet showing pull stock, cut dimensions, offcut tag, and shop drawing"
+            caption="Cutting sheet: pull stock, cut line, offcut tag to rack, and shop drawing"
+          />
         </div>
 
         <div className="space-y-2">

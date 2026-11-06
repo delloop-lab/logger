@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, DEFAULT_LUMBER_TYPES } from '@/lib/store';
 import {
   Sliders,
   Save,
   Plus,
   Trash2,
-  Ruler,
   RotateCcw,
   Pencil,
   Check,
@@ -15,12 +14,12 @@ import {
   HardDriveDownload,
   Upload,
   ShieldCheck,
-  History,
+  MapPin,
+  Layers,
 } from 'lucide-react';
 import { notify, toast } from '@/lib/notify';
 import { displayToMm, formatDim, mmToDisplay, unitLabel, type UnitSystem } from '@/lib/units';
 import { getSupabase } from '@/lib/supabase/client';
-import { DEFAULT_LUMBER_TYPES } from '@/lib/store';
 import {
   downloadBackupFileToDevice,
   getAutoDownloadDailyPreference,
@@ -78,9 +77,15 @@ export default function StorageSettings() {
   }, [backupUserKey, store.boards.length, store.savedProjects.length]);
 
   useEffect(() => {
-    setMinLength(String(mmToDisplay(settings.minLength, unitSystem, unitSystem === 'imperial' ? 2 : 0)));
-    setMinWidth(String(mmToDisplay(settings.minWidth, unitSystem, unitSystem === 'imperial' ? 2 : 0)));
-    setKerfDisplay(String(mmToDisplay(defaultKerfMm, unitSystem, unitSystem === 'imperial' ? 3 : 1)));
+    setMinLength(
+      String(mmToDisplay(settings.minLength, unitSystem, unitSystem === 'imperial' ? 2 : 0))
+    );
+    setMinWidth(
+      String(mmToDisplay(settings.minWidth, unitSystem, unitSystem === 'imperial' ? 2 : 0))
+    );
+    setKerfDisplay(
+      String(mmToDisplay(defaultKerfMm, unitSystem, unitSystem === 'imperial' ? 3 : 1))
+    );
   }, [unitSystem, settings.minLength, settings.minWidth, defaultKerfMm]);
 
   useEffect(() => {
@@ -105,7 +110,20 @@ export default function StorageSettings() {
 
   const handleUnitChange = (system: UnitSystem) => {
     setUnitSystem(system);
-    toast.success(system === 'imperial' ? 'Using inches (imperial)' : 'Using millimetres (metric)');
+    toast.success(
+      system === 'imperial' ? 'Using inches (imperial)' : 'Using millimetres (metric)'
+    );
+  };
+
+  const handleSaveKerf = (e: React.FormEvent) => {
+    e.preventDefault();
+    const v = displayToMm(parseFloat(kerfDisplay), unitSystem);
+    if (isNaN(v) || v < 0) {
+      toast.error('Enter a valid kerf (0 or greater).');
+      return;
+    }
+    setDefaultKerfMm(v);
+    toast.success(`Default kerf set to ${formatDim(v, unitSystem)}.`);
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -201,267 +219,271 @@ export default function StorageSettings() {
     toast.success(`Removed lumber type: ${name}`);
   };
 
+  const formatShortBackupTitle = (b: StoredBackupRecord) => {
+    if (b.slot === 'latest') return 'Most recent';
+    if (b.slot === 'highwater') return 'Fullest backup';
+    const m = b.backupDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return `Daily (${m[3]}/${m[2]})`;
+    return `Daily (${b.backupDate})`;
+  };
+
   return (
-    <div className="space-y-6">
-      {userEmail && (
-        <p className="text-xs text-gray-400">
-          Signed in as <span className="font-mono text-white">{userEmail}</span>
-        </p>
-      )}
-
-      <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-4 shadow-xl">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Ruler className="w-5 h-5 text-orange-500" /> Measurement units
-        </h3>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => handleUnitChange('metric')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold cursor-pointer border ${
-              unitSystem === 'metric'
-                ? 'bg-orange-600 text-white border-orange-500'
-                : 'bg-[#121417] text-gray-300 border-gray-800 hover:border-gray-600'
-            }`}
-          >
-            Metric (mm)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleUnitChange('imperial')}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-bold cursor-pointer border ${
-              unitSystem === 'imperial'
-                ? 'bg-orange-600 text-white border-orange-500'
-                : 'bg-[#121417] text-gray-300 border-gray-800 hover:border-gray-600'
-            }`}
-          >
-            Imperial (inches)
-          </button>
-        </div>
+    <div className="space-y-4">
+      {/* Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <h2 className="text-base font-bold text-white uppercase tracking-wider">Settings</h2>
+        {userEmail && (
+          <p className="text-xs text-gray-400">
+            Signed in as: <span className="font-mono text-white">{userEmail}</span>
+          </p>
+        )}
       </div>
 
-      <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-4 shadow-xl">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Ruler className="w-5 h-5 text-orange-500" /> Default saw kerf
+      {/* 1. Workshop Rules & Defaults (Top Hero Card) */}
+      <div className="bg-[#1e2228] border border-gray-800 p-5 rounded-2xl shadow-xl space-y-3">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2 border-b border-gray-800 pb-2.5">
+          <Sliders className="w-4 h-4 text-orange-500" /> Workshop Rules &amp; Defaults
         </h3>
-        <p className="text-xs text-gray-400">
-          Blade width used for new projects. You can override kerf on any open project if you change
-          blades.
-        </p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const v = displayToMm(parseFloat(kerfDisplay), unitSystem);
-            if (isNaN(v) || v < 0) {
-              toast.error('Enter a valid kerf (0 or greater).');
-              return;
-            }
-            setDefaultKerfMm(v);
-            toast.success(`Default kerf set to ${formatDim(v, unitSystem)}.`);
-          }}
-          className="flex flex-col sm:flex-row gap-3 items-end max-w-md"
-        >
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-medium text-gray-400 mb-1">Kerf ({u})</label>
-            <input
-              type="number"
-              step="any"
-              min="0"
-              value={kerfDisplay}
-              onChange={(e) => setKerfDisplay(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white font-semibold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
-          >
-            <Save className="w-4 h-4" /> Save kerf
-          </button>
-        </form>
-      </div>
 
-      <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-4 shadow-xl">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          <Sliders className="w-5 h-5 text-orange-500" /> Minimum reusable offcut size
-        </h3>
-        <form onSubmit={handleSaveSettings} className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">
-              Min Length ({u})
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+          {/* Units Toggle */}
+          <div className="lg:col-span-3 space-y-1.5">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              Units
             </label>
-            <input
-              type="number"
-              step="any"
-              value={minLength}
-              onChange={(e) => setMinLength(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Min Width ({u})</label>
-            <input
-              type="number"
-              step="any"
-              value={minWidth}
-              onChange={(e) => setMinWidth(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              className="w-full bg-orange-600 hover:bg-orange-500 text-white font-semibold py-2.5 rounded-xl transition-all text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-orange-600/30"
-            >
-              <Save className="w-4 h-4" /> Save Rules
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-4 shadow-xl">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          Lumber types ({lumberTypes.length})
-        </h3>
-        <p className="text-xs text-gray-400 leading-relaxed">
-          Species and sheet goods shown in Quick Log and Projects &amp; Cuts. Add custom stock such as
-          Birch Plywood or Jarrah, or rename the built-in labels.
-        </p>
-
-        <form onSubmit={handleAddLumberType} className="flex gap-3">
-          <input
-            type="text"
-            placeholder="e.g. Birch Plywood, Jarrah"
-            value={newLumberType}
-            onChange={(e) => setNewLumberType(e.target.value)}
-            className="flex-1 bg-[#121417] border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-          />
-          <button
-            type="submit"
-            className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-orange-500" /> Add type
-          </button>
-        </form>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-          {lumberTypes.map((name) => {
-            const editing = editingLumber === name;
-            return (
-              <div
-                key={name}
-                className="bg-[#121417] border border-gray-800 p-3 rounded-xl flex items-center gap-2 text-xs text-gray-300"
-              >
-                {editing ? (
-                  <>
-                    <input
-                      type="text"
-                      value={editLumberValue}
-                      onChange={(e) => setEditLumberValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          saveEditLumber();
-                        }
-                        if (e.key === 'Escape') cancelEditLumber();
-                      }}
-                      className="flex-1 min-w-0 bg-[#1e2228] border border-orange-500/50 rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={saveEditLumber}
-                      className="text-emerald-400 hover:text-emerald-300 p-1 cursor-pointer"
-                      aria-label="Save lumber type"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelEditLumber}
-                      className="text-gray-500 hover:text-white p-1 cursor-pointer"
-                      aria-label="Cancel edit"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1 min-w-0 font-mono truncate">{name}</span>
-                    <button
-                      type="button"
-                      onClick={() => startEditLumber(name)}
-                      className="text-gray-500 hover:text-orange-400 p-1 cursor-pointer"
-                      aria-label={`Edit ${name}`}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteLumberType(name)}
-                      className="text-gray-500 hover:text-red-400 p-1 cursor-pointer"
-                      aria-label={`Remove ${name}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-4 shadow-xl">
-        <h3 className="text-base font-bold text-white flex items-center gap-2">
-          Workshop storage locations ({storageLocations.length})
-        </h3>
-
-        <form onSubmit={handleAddLocation} className="flex gap-3">
-          <input
-            type="text"
-            placeholder="e.g. Rack 4, Cabinet B"
-            value={newLocation}
-            onChange={(e) => setNewLocation(e.target.value)}
-            className="flex-1 bg-[#121417] border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-          />
-          <button
-            type="submit"
-            className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-orange-500" /> Add Location
-          </button>
-        </form>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pt-2">
-          {storageLocations.map((loc) => (
-            <div
-              key={loc}
-              className="bg-[#121417] border border-gray-800 p-3 rounded-xl flex items-center justify-between text-xs text-gray-300 font-mono"
-            >
-              <span>{loc}</span>
+            <div className="grid grid-cols-2 bg-[#121417] p-1 rounded-xl border border-gray-800">
               <button
                 type="button"
-                onClick={() => handleDeleteLocation(loc)}
-                className="text-gray-500 hover:text-red-400 p-1 cursor-pointer"
+                onClick={() => handleUnitChange('metric')}
+                className={`py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                  unitSystem === 'metric'
+                    ? 'bg-orange-600 text-white shadow'
+                    : 'text-gray-400 hover:text-white'
+                }`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                Metric (mm)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUnitChange('imperial')}
+                className={`py-2 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                  unitSystem === 'imperial'
+                    ? 'bg-orange-600 text-white shadow'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Imp (in)
               </button>
             </div>
-          ))}
+          </div>
+
+          {/* Saw Kerf */}
+          <form onSubmit={handleSaveKerf} className="lg:col-span-4 space-y-1.5">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              Saw Kerf ({u})
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={kerfDisplay}
+                onChange={(e) => setKerfDisplay(e.target.value)}
+                className="flex-1 min-w-0 bg-[#121417] border border-gray-800 rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Save className="w-3.5 h-3.5" /> Save
+              </button>
+            </div>
+          </form>
+
+          {/* Min Reusable Offcut */}
+          <form onSubmit={handleSaveSettings} className="lg:col-span-5 space-y-1.5">
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              Min Reusable Offcut ({u})
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 bg-[#121417] border border-gray-800 rounded-xl px-2.5 py-2 focus-within:border-orange-500">
+                <span className="text-[11px] font-mono text-gray-500 font-bold">L:</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={minLength}
+                  onChange={(e) => setMinLength(e.target.value)}
+                  className="w-full min-w-0 bg-transparent text-sm text-white font-mono focus:outline-none"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 bg-[#121417] border border-gray-800 rounded-xl px-2.5 py-2 focus-within:border-orange-500">
+                <span className="text-[11px] font-mono text-gray-500 font-bold">W:</span>
+                <input
+                  type="number"
+                  step="any"
+                  value={minWidth}
+                  onChange={(e) => setMinWidth(e.target.value)}
+                  className="w-full min-w-0 bg-transparent text-sm text-white font-mono focus:outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Save className="w-3.5 h-3.5" /> Save
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
-      <div className="bg-[#1e2228] border border-emerald-900/50 p-6 rounded-2xl space-y-4 shadow-xl">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="space-y-1">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-emerald-400" /> Daily Workshop Backups
+      {/* 2. Master Lists (2-Column Grid) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Lumber Species */}
+        <div className="bg-[#1e2228] border border-gray-800 p-5 rounded-2xl space-y-3 shadow-xl flex flex-col">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-orange-500" /> Lumber Species ({lumberTypes.length})
+          </h3>
+
+          <form onSubmit={handleAddLumberType} className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Add species (e.g. Birch Plywood, Jarrah)…"
+              value={newLumberType}
+              onChange={(e) => setNewLumberType(e.target.value)}
+              className="flex-1 min-w-0 bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-orange-500"
+            />
+            <button
+              type="submit"
+              className="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5 text-orange-500" /> Add
+            </button>
+          </form>
+
+          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 border-t border-gray-800/80 pt-2">
+            {lumberTypes.map((name) => {
+              const editing = editingLumber === name;
+              return (
+                <div
+                  key={name}
+                  className="bg-[#121417] border border-gray-800/90 px-3 py-2 rounded-xl flex items-center gap-2 text-xs text-gray-200"
+                >
+                  {editing ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editLumberValue}
+                        onChange={(e) => setEditLumberValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            saveEditLumber();
+                          }
+                          if (e.key === 'Escape') cancelEditLumber();
+                        }}
+                        className="flex-1 min-w-0 bg-[#1e2228] border border-orange-500/50 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={saveEditLumber}
+                        className="text-emerald-400 hover:text-emerald-300 p-1 cursor-pointer"
+                        aria-label="Save lumber type"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEditLumber}
+                        className="text-gray-500 hover:text-white p-1 cursor-pointer"
+                        aria-label="Cancel edit"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 min-w-0 font-mono truncate">• {name}</span>
+                      <button
+                        type="button"
+                        onClick={() => startEditLumber(name)}
+                        className="text-gray-400 hover:text-orange-400 px-1.5 py-0.5 rounded text-[11px] font-semibold cursor-pointer flex items-center gap-1"
+                        aria-label={`Edit ${name}`}
+                      >
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLumberType(name)}
+                        className="text-gray-400 hover:text-red-400 px-1.5 py-0.5 rounded text-[11px] font-semibold cursor-pointer flex items-center gap-1"
+                        aria-label={`Remove ${name}`}
+                      >
+                        <Trash2 className="w-3 h-3" /> Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Storage Locations */}
+        <div className="bg-[#1e2228] border border-gray-800 p-5 rounded-2xl space-y-3 shadow-xl flex flex-col">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-orange-500" /> Storage Locations ({storageLocations.length})
+          </h3>
+
+          <form onSubmit={handleAddLocation} className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Add location (e.g. Rack 4, Cabinet B)…"
+              value={newLocation}
+              onChange={(e) => setNewLocation(e.target.value)}
+              className="flex-1 min-w-0 bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-orange-500"
+            />
+            <button
+              type="submit"
+              className="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5 text-orange-500" /> Add
+            </button>
+          </form>
+
+          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 border-t border-gray-800/80 pt-2">
+            {storageLocations.map((loc) => (
+              <div
+                key={loc}
+                className="bg-[#121417] border border-gray-800/90 px-3 py-2 rounded-xl flex items-center justify-between gap-2 text-xs text-gray-200 font-mono"
+              >
+                <span className="truncate">• {loc}</span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteLocation(loc)}
+                  className="text-gray-400 hover:text-red-400 px-1.5 py-0.5 rounded text-[11px] font-sans font-semibold cursor-pointer flex items-center gap-1 shrink-0"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Workshop Backups */}
+      <div className="bg-[#1e2228] border border-emerald-900/50 p-5 rounded-2xl space-y-3 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800 pb-3">
+          <div className="space-y-0.5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Workshop Backups
             </h3>
-            <p className="text-xs text-gray-400 leading-relaxed">
-              Your boards and projects are automatically saved every day on this device and in your online account. You can also save a backup file to your computer or bring back any saved copy below.
+            <p className="text-[11px] text-gray-400">
+              Your boards and projects are automatically saved every day on this device and in your online account.
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               type="button"
               onClick={async () => {
@@ -493,9 +515,9 @@ export default function StorageSettings() {
                 );
                 toast.success('Backup saved to your computer.');
               }}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
             >
-              <HardDriveDownload className="w-4 h-4" /> Save backup to computer
+              <HardDriveDownload className="w-3.5 h-3.5" /> Save to Computer
             </button>
 
             <input
@@ -523,100 +545,83 @@ export default function StorageSettings() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
+              className="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
             >
-              <Upload className="w-4 h-4 text-orange-400" /> Load backup from computer
+              <Upload className="w-3.5 h-3.5 text-orange-400" /> Load File
             </button>
+
+            <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none pl-1">
+              <input
+                type="checkbox"
+                checked={autoDownloadDaily}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setAutoDownloadDaily(next);
+                  setAutoDownloadDailyPreference(next);
+                  toast.success(
+                    next
+                      ? 'Auto-save daily backup file turned on.'
+                      : 'Auto-save daily backup file turned off.'
+                  );
+                }}
+                className="rounded border-gray-700 bg-[#121417] text-orange-500 focus:ring-orange-500"
+              />
+              <span>Auto-save daily backup</span>
+            </label>
           </div>
         </div>
 
-        <label className="flex items-center gap-2.5 text-xs text-gray-300 cursor-pointer select-none pt-1">
-          <input
-            type="checkbox"
-            checked={autoDownloadDaily}
-            onChange={(e) => {
-              const next = e.target.checked;
-              setAutoDownloadDaily(next);
-              setAutoDownloadDailyPreference(next);
-              toast.success(
-                next
-                  ? 'Daily backup download turned on (saves one file a day to your Downloads folder).'
-                  : 'Daily file download turned off (automatic daily backups in the app stay on).'
-              );
-            }}
-            className="rounded border-gray-700 bg-[#121417] text-orange-500 focus:ring-orange-500"
-          />
-          <span>
-            Automatically save a backup file to my Downloads folder once a day
-          </span>
-        </label>
-
         {deviceBackups.length > 0 && (
-          <div className="space-y-2 pt-2 border-t border-gray-800">
-            <div className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
-              <History className="w-3.5 h-3.5 text-orange-400" /> Saved backups on this device ({deviceBackups.length})
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
-              {deviceBackups.slice(0, 10).map((b) => (
-                <div
-                  key={b.id}
-                  className="bg-[#121417] border border-gray-800 rounded-xl p-3 flex items-center justify-between gap-2 text-xs"
-                >
-                  <div className="min-w-0">
-                    <div className="font-bold text-white truncate">
-                      {b.slot === 'latest'
-                        ? 'Most recent backup'
-                        : b.slot === 'highwater'
-                          ? 'Fullest workshop backup'
-                          : `Daily backup (${b.backupDate})`}
-                    </div>
-                    <div className="text-[11px] text-gray-400 font-mono">
-                      {b.boardCount} boards · {b.projectCount} projects ·{' '}
-                      {new Date(b.createdAt).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const res = store.mergeBackupIntoWorkshop(b.payload);
-                        if (res.addedBoards === 0 && res.addedProjects === 0) {
-                          toast.success('Everything in this backup is already in your workshop.');
-                        } else {
-                          toast.success(
-                            `Restored ${res.addedBoards} boards and ${res.addedProjects} projects.`
-                          );
-                        }
-                      }}
-                      className="px-2.5 py-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-lg text-[11px] cursor-pointer"
-                    >
-                      Restore
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => downloadBackupFileToDevice(b.payload, b.slot.replace(':', '-'))}
-                      className="px-2 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold rounded-lg text-[11px] cursor-pointer"
-                      title="Save a copy of this backup to your computer"
-                    >
-                      Save file
-                    </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {deviceBackups.slice(0, 8).map((b) => (
+              <div
+                key={b.id}
+                className="bg-[#121417] border border-gray-800 rounded-xl p-3 flex flex-col justify-between gap-2.5 text-xs"
+              >
+                <div className="space-y-0.5">
+                  <div className="font-bold text-white truncate">{formatShortBackupTitle(b)}</div>
+                  <div className="text-[11px] text-gray-400 font-mono">
+                    {b.boardCount} bds • {b.projectCount} proj
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const res = store.mergeBackupIntoWorkshop(b.payload);
+                      if (res.addedBoards === 0 && res.addedProjects === 0) {
+                        toast.success('Everything in this backup is already in your workshop.');
+                      } else {
+                        toast.success(
+                          `Restored ${res.addedBoards} boards and ${res.addedProjects} projects.`
+                        );
+                      }
+                    }}
+                    className="flex-1 py-1.5 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-lg text-[11px] cursor-pointer text-center"
+                  >
+                    Restore
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadBackupFileToDevice(b.payload, b.slot.replace(':', '-'))}
+                    className="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold rounded-lg text-[11px] cursor-pointer"
+                    title="Save a copy of this backup to your computer"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      <div className="bg-[#1e2228] border border-red-900/50 p-6 rounded-2xl space-y-3 shadow-xl">
-        <h3 className="text-base font-bold text-red-300 flex items-center gap-2">
-          <RotateCcw className="w-5 h-5" /> Start completely fresh
-        </h3>
-        <p className="text-xs text-gray-400 leading-relaxed">
-          Clears <strong className="text-gray-200">all inventory</strong>, finished pieces, offcuts,
-          cut history, completed cut marks, and saved projects. Unit system, lumber types, and
-          storage location names are kept. This syncs to the cloud for your signed-in account.
-        </p>
+      {/* 4. Danger Zone (Low-Profile Red Banner) */}
+      <div className="bg-red-950/25 border border-red-900/50 px-5 py-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="text-xs text-gray-300">
+          <strong className="text-red-300 uppercase tracking-wide mr-2">Danger Zone — Start Fresh:</strong>
+          Clears inventory, offcuts, saved projects, and completed cuts.
+        </div>
         <button
           type="button"
           onClick={async () => {
@@ -631,9 +636,9 @@ export default function StorageSettings() {
             resetWorkshopData();
             toast.success('Workshop cleared, log stock and start a new project.');
           }}
-          className="px-5 py-2.5 bg-red-950 hover:bg-red-900 border border-red-700/60 text-red-200 font-semibold rounded-xl text-xs flex items-center gap-2 cursor-pointer"
+          className="px-4 py-2 bg-red-950 hover:bg-red-900 border border-red-700/60 text-red-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
         >
-          <Trash2 className="w-4 h-4" /> Wipe inventory & cuts, start fresh
+          <RotateCcw className="w-3.5 h-3.5" /> Wipe Inventory
         </button>
       </div>
     </div>

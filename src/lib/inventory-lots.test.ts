@@ -65,7 +65,9 @@ describe('expandLotsToStock stable unit tags', () => {
     const tags = expandLotsToStock(boards).map((s) => s.tagId);
     expect(tags[0]).toBe('PIN-001-2');
     expect(tags).not.toContain('PIN-001-1');
-    expect(tags).toHaveLength(8);
+    // 8 remaining fresh units + 1 reusable ASIDE offcut
+    expect(tags).toContain('PIN-001-1-OP1-ASIDE');
+    expect(tags).toHaveLength(9);
   });
 
   it('respects stored unitsIssued even without child tags', () => {

@@ -410,16 +410,14 @@ export default function CutMapWorkshop({
     const blankW = blankLen * scale;
     const remW = remLen * scale;
     const kerfPx = Math.max(2, step.kerf * scale);
-    const legendY = my + bh + 44;
-    const titleY = legendY + 40;
-    const svgW = Math.max(mx + bw + 100, mx + 560 + 40);
-    const svgH = titleY + 78;
+    const svgW = Math.max(mx + bw + 100, 680);
+    const svgH = my + bh + 64;
 
     return (
       <SheetFrame
         svgW={svgW}
         svgH={svgH}
-        title="SHOP DRAWING, BLANK FIRST (PRESERVE LONG OFFCUT)"
+        title="SHOP DRAWING — BLANK CROSSCUT"
         species={step.species}
       >
         <rect x={mx} y={my} width={bw} height={bh} fill="url(#shop-grain)" stroke={INK} strokeWidth={2.2} />
@@ -445,37 +443,17 @@ export default function CutMapWorkshop({
             strokeDasharray="7 4"
           />
         )}
-        <DimH x1={mx} x2={mx + blankW} y={my - 28} label={`BLANK ${formatDim(blankLen, unitSystem)}`} />
+        <DimH x1={mx} x2={mx + blankW} y={my - 26} label={`BLANK ${formatDim(blankLen, unitSystem)}`} />
         {remW > 1 && (
           <DimH
             x1={mx + blankW + kerfPx}
             x2={mx + blankW + kerfPx + remW}
-            y={my + bh + 26}
+            y={my + bh + 28}
             label={`KEEP WHOLE ${formatDim(remLen, unitSystem)}`}
           />
         )}
         <DimV y1={my} y2={my + bh} x={mx - 34} label={formatDim(boardWid, unitSystem)} />
-        <Callout cx={mx + Math.min(Math.max(blankW / 2, 18), 48)} cy={my - 34} letter="A" />
-        <LegendLines
-          x={mx}
-          y={legendY}
-          lines={[
-            `A = short blank to rip next (${formatDim(blankLen, unitSystem)} × ${formatDim(boardWid, unitSystem)})`,
-            `Dashed = one continuous offcut — do not fragment${isCompleted ? ' · COMPLETE' : ''}`,
-          ]}
-        />
-        <TitleBlock
-          x={mx}
-          y={titleY}
-          w={bw}
-          projectName={projectName}
-          boardTag={step.boardTag}
-          species={step.species}
-          dims={`${formatDim(blankLen, unitSystem)} × ${formatDim(boardWid, unitSystem)}`}
-          op="BLANK CROSSCUT"
-          stepLabel={stepLabel || `Step ${step.stepIndex}`}
-          pullTag={pullTag}
-        />
+        <Callout cx={mx + Math.min(Math.max(blankW / 2, 18), 48)} cy={Math.max(my + bh / 2, my + 24)} letter="A" />
       </SheetFrame>
     );
   }
@@ -496,10 +474,8 @@ export default function CutMapWorkshop({
     const kerfPx = Math.max(2, kerf * scale);
     const asideH = ripAsideWid > 0.5 ? ripAsideWid * scale : 0;
     const stripTop = my + Math.min(stripY, Math.max(0, faceWid - stripWid - kerf - ripAsideWid)) * scale;
-    const legendY = my + bh + 48;
-    const titleY = legendY + 48;
-    const svgW = Math.max(mx + bw + 120, mx + 560 + 40);
-    const svgH = titleY + 78;
+    const svgW = Math.max(mx + bw + 120, 680);
+    const svgH = my + bh + 54;
     // Short piece in hand vs a long nest board → ripped from a blank, not full stock
     const isShortBlankRip =
       Number(step.frameLen) > ripLen + 1 ||
@@ -509,7 +485,7 @@ export default function CutMapWorkshop({
       <SheetFrame
         svgW={svgW}
         svgH={svgH}
-        title={isShortBlankRip ? 'SHOP DRAWING, RIP (FROM BLANK)' : 'SHOP DRAWING, RIP (FULL LENGTH)'}
+        title={isShortBlankRip ? 'SHOP DRAWING — RIP (FROM BLANK)' : 'SHOP DRAWING — RIP (FULL LENGTH)'}
         species={step.species}
       >
         <rect x={mx} y={my} width={bw} height={bh} fill="url(#shop-grain)" stroke={INK} strokeWidth={2.2} />
@@ -575,36 +551,6 @@ export default function CutMapWorkshop({
             />
           </>
         )}
-
-        <LegendLines
-          x={mx}
-          y={legendY}
-          lines={[
-            `A = ${
-              step.producesFinishedPart ? `FINISHED (${step.partName})` : 'KEEP strip'
-            } ${formatDim(ripLen, unitSystem)} × ${formatDim(stripWid, unitSystem)}`,
-            asideH > 1
-              ? `B = SET ASIDE ${formatDim(ripAsideLen > 0.5 ? ripAsideLen : ripLen, unitSystem)} × ${formatDim(ripAsideWid, unitSystem)}, kerf ${formatDim(kerf, unitSystem)}${isCompleted ? ' · COMPLETE' : ''}`
-              : `Kerf ${formatDim(kerf, unitSystem)}${isCompleted ? ' · COMPLETE' : ''}`,
-          ]}
-        />
-
-        <TitleBlock
-          x={mx}
-          y={titleY}
-          w={bw}
-          projectName={projectName}
-          boardTag={step.boardTag}
-          species={step.species}
-          dims={`${formatDim(ripLen, unitSystem)} × ${formatDim(stripWid, unitSystem)} × ${formatDim(step.thickness, unitSystem)}`}
-          op={
-            step.producesFinishedPart
-              ? `RIP → FINISHED ${formatDim(stripWid, unitSystem)}`
-              : `RIP → ${formatDim(stripWid, unitSystem)} strip`
-          }
-          stepLabel={stepLabel || `Step ${step.stepIndex}`}
-          pullTag={pullTag}
-        />
       </SheetFrame>
     );
   }
@@ -653,19 +599,14 @@ export default function CutMapWorkshop({
   const cutW = Math.min(step.cutLen * scale, Math.max(handW, step.cutLen * scale));
   const tipW = Math.max(0, tipLeft * scale);
 
-  // Set-aside block BELOW the strip, full width, no side overlap
-  const asideBlockY = my + bh + 56;
-  const asideBlockH = 88;
-  const legendY = asideBlockY + asideBlockH + 28;
-  const titleY = legendY + 36;
-  const svgW = Math.max(mx + fullTrackW + 100, mx + 560 + 40);
-  const svgH = titleY + 78;
+  const svgW = Math.max(mx + fullTrackW + 100, 680);
+  const svgH = my + bh + 72;
 
   return (
     <SheetFrame
       svgW={svgW}
       svgH={svgH}
-      title="SHOP DRAWING, CROSSCUT (STRIP IN HAND)"
+      title="SHOP DRAWING — CROSSCUT (STRIP IN HAND)"
       species={step.species}
     >
       {/* Ghost / outline of the piece being drawn */}
@@ -786,83 +727,6 @@ export default function CutMapWorkshop({
           label={`STRIP TIP LEFT ${formatDim(tipLeft, unitSystem)}`}
         />
       )}
-
-      {/* Set-aside from RIP, below, large clear dims (always full length × odd width) */}
-      <rect
-        x={mx}
-        y={asideBlockY}
-        width={fullTrackW}
-        height={asideBlockH}
-        fill={PAPER}
-        stroke={INK}
-        strokeWidth={1.8}
-        strokeDasharray="7 4"
-      />
-      <text
-        x={mx + 14}
-        y={asideBlockY + 22}
-        fontSize={12}
-        fontFamily="ui-monospace, monospace"
-        fontWeight={700}
-        fill={FAINT}
-      >
-        SET ASIDE FROM RIP (parked, do not cut yet)
-      </text>
-      {asideWid > 1 ? (
-        <>
-          <rect
-            x={mx + 14}
-            y={asideBlockY + 34}
-            width={Math.min(fullTrackW - 28, 520)}
-            height={28}
-            fill="#f3f4f6"
-            stroke={INK}
-            strokeWidth={1.3}
-          />
-          <text
-            x={mx + 14 + Math.min(fullTrackW - 28, 520) / 2}
-            y={asideBlockY + 54}
-            textAnchor="middle"
-            fontSize={16}
-            fontFamily="ui-monospace, monospace"
-            fontWeight={700}
-            fill={INK}
-          >
-            {formatDim(asideLen, unitSystem)} × {formatDim(asideWid, unitSystem)}
-          </text>
-        </>
-      ) : (
-        <text
-          x={mx + 14}
-          y={asideBlockY + 56}
-          fontSize={13}
-          fontFamily="ui-monospace, monospace"
-          fill={FAINT}
-        >
-          No large odd piece from this rip
-        </text>
-      )}
-
-      <LegendLines
-        x={mx}
-        y={legendY}
-        lines={[
-          `Hatch = already cut off strip · Cut ${letter} = this crosscut · dark gap = kerf ${formatDim(kerf, unitSystem)}${isCompleted ? ' · COMPLETE' : ''}`,
-        ]}
-      />
-
-      <TitleBlock
-        x={mx}
-        y={titleY}
-        w={fullTrackW}
-        projectName={projectName}
-        boardTag={step.boardTag}
-        species={step.species}
-        dims={`${formatDim(step.cutLen, unitSystem)} × ${formatDim(step.cutWid, unitSystem)}`}
-        op={`CROSSCUT ${letter}`}
-        stepLabel={stepLabel || `Step ${step.stepIndex}`}
-        pullTag={pullTag}
-      />
     </SheetFrame>
   );
 }

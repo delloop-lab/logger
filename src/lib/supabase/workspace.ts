@@ -115,20 +115,33 @@ export async function loadWorkspace(userId: string): Promise<WorkspaceResult> {
 
   const savedProjects: SavedProject[] = (projectsRes.data || []).map((row) => {
     const rowKerf = row.kerf_mm;
-    const statusRaw = String(row.status || 'active').toLowerCase();
+    const rawOps = Array.isArray(row.completed_cut_ops)
+      ? (row.completed_cut_ops as string[])
+      : [];
+    // Support embedded status/pause metadata inside completed_cut_ops when DB lacks status/pause_reason columns
+    const statusSentinel = rawOps.find((op) => typeof op === 'string' && op.startsWith('__status:'));
+    const pauseSentinel = rawOps.find((op) => typeof op === 'string' && op.startsWith('__pause:'));
+    const completedCutOps = rawOps.filter(
+      (op) => typeof op === 'string' && !op.startsWith('__status:') && !op.startsWith('__pause:')
+    );
+    const statusRaw = String(
+      row.status || (statusSentinel ? statusSentinel.slice('__status:'.length) : 'active')
+    ).toLowerCase();
     const status =
       statusRaw === 'paused'
         ? ('paused' as const)
         : statusRaw === 'completed'
           ? ('completed' as const)
           : ('active' as const);
+    const pauseReason = row.pause_reason
+      ? String(row.pause_reason)
+      : pauseSentinel
+        ? pauseSentinel.slice('__pause:'.length)
+        : undefined;
     const cuttingPlan =
       row.cutting_plan && typeof row.cutting_plan === 'object'
         ? (row.cutting_plan as SavedCuttingPlan)
         : undefined;
-    const completedCutOps = Array.isArray(row.completed_cut_ops)
-      ? (row.completed_cut_ops as string[])
-      : undefined;
     const difficultyRaw = String(row.difficulty || '').trim();
     const difficulty =
       difficultyRaw === 'Beginner' ||
@@ -146,11 +159,11 @@ export async function loadWorkspace(userId: string): Promise<WorkspaceResult> {
         ? { kerfMm: Math.max(0, Number(rowKerf)) }
         : {}),
       status,
-      ...(row.pause_reason ? { pauseReason: String(row.pause_reason) } : {}),
+      ...(pauseReason ? { pauseReason } : {}),
       ...(row.description ? { description: String(row.description) } : {}),
       ...(difficulty ? { difficulty } : {}),
       ...(cuttingPlan ? { cuttingPlan } : {}),
-      ...(completedCutOps ? { completedCutOps } : {}),
+      ...(completedCutOps.length > 0 ? { completedCutOps } : {}),
     };
   });
 
@@ -313,6 +326,18 @@ export async function saveProjects(
     parts: p.parts,
   }));
 
+  const encodeOpsWithMeta = (p: SavedProject): string[] => {
+    const clean = (p.completedCutOps || []).filter(
+      (op) => typeof op === 'string' && !op.startsWith('__status:') && !op.startsWith('__pause:')
+    );
+    const st = projectStatusSql(p.status);
+    const meta: string[] = [`__status:${st}`];
+    if (st === 'paused' && p.pauseReason?.trim()) {
+      meta.push(`__pause:${p.pauseReason.trim()}`);
+    }
+    return [...clean, ...meta];
+  };
+
   const withExtras = baseRows.map((row, i) => ({
     ...row,
     kerf_mm: unique[i].kerfMm ?? null,
@@ -321,7 +346,16 @@ export async function saveProjects(
     description: unique[i].description?.trim() ? unique[i].description.trim() : null,
     difficulty: unique[i].difficulty ?? null,
     cutting_plan: unique[i].cuttingPlan ?? null,
-    completed_cut_ops: unique[i].completedCutOps ?? [],
+    completed_cut_ops: encodeOpsWithMeta(unique[i]),
+  }));
+
+  const withoutStatusPauseCols = baseRows.map((row, i) => ({
+    ...row,
+    kerf_mm: unique[i].kerfMm ?? null,
+    description: unique[i].description?.trim() ? unique[i].description.trim() : null,
+    difficulty: unique[i].difficulty ?? null,
+    cutting_plan: unique[i].cuttingPlan ?? null,
+    completed_cut_ops: encodeOpsWithMeta(unique[i]),
   }));
 
   const isMissingCol = (msg: string) =>
@@ -372,6 +406,11 @@ export async function saveProjects(
 
   const writePayloads: Record<string, unknown>[][] = [
     withExtras,
+    withoutStatusPauseCols,
+    withoutStatusPauseCols.map((row) => {
+      const { cutting_plan: _c, completed_cut_ops: _o, ...rest } = row;
+      return rest;
+    }),
     withExtras.map((row) => {
       const { cutting_plan: _c, completed_cut_ops: _o, ...rest } = row;
       return rest;
@@ -379,7 +418,6 @@ export async function saveProjects(
     baseRows.map((row, i) => ({
       ...row,
       kerf_mm: unique[i].kerfMm ?? null,
-      status: projectStatusSql(unique[i].status),
       description: unique[i].description?.trim() ? unique[i].description.trim() : null,
       difficulty: unique[i].difficulty ?? null,
     })),

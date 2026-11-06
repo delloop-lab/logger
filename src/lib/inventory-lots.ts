@@ -57,12 +57,15 @@ export function resolveUnitsIssued(lot: Board, allBoards: Board[]): number {
   return Math.max(stored, inferred);
 }
 
-/** Raw lots + reusable offcuts, never re-nest finished parts or in-progress OP rem/strip/aside tags */
+/**
+ * Raw lots + reusable offcuts (including ASIDE offcuts from blank/rip cuts).
+ * Never re-nest finished parts, waste, or mid-sequence working strips/remnants (-STRIP / -REM).
+ */
 export function isNestableStock(b: Board): boolean {
   if (b.status === 'consumed') return false;
   if (b.classification === 'finished_piece' || b.classification === 'waste') return false;
   if (/-PART$/i.test(b.tagId || '')) return false;
-  if (/-OP\d+-(?:REM|STRIP|ASIDE|WASTE)$/i.test(b.tagId || '')) return false;
+  if (/-OP\d+-(?:REM|STRIP|WASTE)$/i.test(b.tagId || '')) return false;
   return true;
 }
 
@@ -78,7 +81,7 @@ export function expandLotsToStock(boards: Board[]): NestStock[] {
     const isOffcut =
       b.classification === 'reusable_offcut' ||
       Boolean(b.originProject) ||
-      /-OFFCUT$/i.test(b.tagId || '');
+      /-(?:OFFCUT|ASIDE)$/i.test(b.tagId || '');
     const base = {
       species: b.species,
       source: b.source,

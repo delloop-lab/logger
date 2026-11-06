@@ -445,16 +445,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
   setAuthChecked: (checked) => set({ authChecked: checked }),
 
   hydrateFromCloud: (data) => {
-    // Merge any missing recovered workshop projects into the cloud library
-    // (previously only ran when cloudProjects.length === 0, so 1 active project blocked the other 4).
+    // Only seed recovered projects if the cloud library is completely empty (0 projects).
+    // Never auto-resurrect a project the user intentionally deleted.
     const cloudProjects = data.savedProjects || [];
-    const recovered = buildRecoveredWorkshopProjects();
-    const existingNames = new Set(cloudProjects.map((p) => projectNameKey(p.name)));
-    const existingIds = new Set(cloudProjects.map((p) => String(p.id)));
-    const missingRecovered = recovered.filter(
-      (p) => !existingNames.has(projectNameKey(p.name)) && !existingIds.has(String(p.id))
-    );
-    const savedProjects = [...cloudProjects, ...missingRecovered];
+    const recovered =
+      cloudProjects.length === 0 ? buildRecoveredWorkshopProjects() : [];
+    const savedProjects = cloudProjects.length > 0 ? cloudProjects : recovered;
     set({
       ...data,
       savedProjects,
@@ -468,7 +464,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       cloudReady: true,
       demoPreview: false,
       cutHistory: [],
-      cloudRevision: missingRecovered.length > 0 ? 1 : 0,
+      cloudRevision: recovered.length > 0 ? 1 : 0,
     });
   },
 
@@ -1263,13 +1259,35 @@ export const useAppStore = create<AppState>()((set, get) => ({
   clearRevealSavedCuttingSheets: () => set({ revealSavedCuttingSheets: false }),
 
   deleteProject: (id) => {
-    set((state) => ({
-      savedProjects: state.savedProjects.filter((p) => p.id !== id),
-      pendingDeletedProjectIds: state.pendingDeletedProjectIds.includes(id)
-        ? state.pendingDeletedProjectIds
-        : [...state.pendingDeletedProjectIds, id],
-      cloudRevision: state.cloudRevision + 1,
-    }));
+    set((state) => {
+      const target = state.savedProjects.find((p) => p.id === id);
+      const isDeletingActive =
+        target && projectNameKey(target.name) === projectNameKey(state.activeProjectName);
+      const prefix = target ? `${target.name.trim()}-` : '';
+      return {
+        savedProjects: state.savedProjects.filter((p) => p.id !== id),
+        pendingDeletedProjectIds: state.pendingDeletedProjectIds.includes(id)
+          ? state.pendingDeletedProjectIds
+          : [...state.pendingDeletedProjectIds, id],
+        ...(isDeletingActive
+          ? {
+              activeProjectName: 'New Project',
+              activeParts: [],
+              activeKerfMm: state.defaultKerfMm,
+              activeCuttingPlan: null,
+              revealSavedCuttingSheets: false,
+            }
+          : {}),
+        ...(prefix
+          ? {
+              completedOperations: state.completedOperations.filter(
+                (op) => !op.startsWith(prefix)
+              ),
+            }
+          : {}),
+        cloudRevision: state.cloudRevision + 1,
+      };
+    });
   },
 
   startNewProject: () => {
