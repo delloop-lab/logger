@@ -5,6 +5,7 @@ import { useAppStore, CutPart, DEFAULT_LUMBER_TYPES } from '@/lib/store';
 import { displayToMm, formatDim, mmToDisplay, unitLabel } from '@/lib/units';
 import {
   STRATEGY_META,
+  createCuttingPlan,
   diagnoseUnallocated,
   speciesMatches,
   type CuttingStrategy,
@@ -389,29 +390,26 @@ export default function CutListNesting() {
       }
     }
 
-    // Same expanded lots the nest uses (qty units, dimensions fallback, skip finished/waste)
+    // Run the real cutting engine against current stock and strategy so we only report genuine unallocated parts
     const nestStock = expandLotsToStock(boards);
-    const stockGaps = activeParts.flatMap((p) => {
-      const piece = {
-        id: p.id,
-        name: p.name,
-        species: p.species,
-        length: p.length,
-        width: p.width,
-        thickness: p.thickness ?? 0,
-      };
-      const reason = diagnoseUnallocated(piece, nestStock);
-      const noStock =
-        reason.startsWith('No ') ||
-        reason.includes('too small') ||
-        reason.includes('too thin');
-      return noStock
-        ? [
-            `• ${p.name} (${p.species}) ${formatDim(p.length, unitSystem)} × ${formatDim(p.width, unitSystem)}${
-              p.thickness ? ` × ${formatDim(p.thickness, unitSystem)}` : ''
-            }\n  ${reason}`,
-          ]
-        : [];
+    const engineParts = activeParts.map((p) => ({
+      id: p.id,
+      name: p.name,
+      species: p.species,
+      length: p.length,
+      width: p.width,
+      thickness: p.thickness ?? 0,
+      quantity: p.quantity,
+    }));
+    const testPlan = createCuttingPlan(nestStock, engineParts, {
+      kerfMm: activeKerfMm,
+      strategy: activeStrategy,
+    });
+    const stockGaps = testPlan.unallocated.map((uPart) => {
+      const reason = diagnoseUnallocated(uPart, nestStock);
+      return `• ${uPart.name} (${uPart.species}) ${formatDim(uPart.length, unitSystem)} × ${formatDim(uPart.width, unitSystem)}${
+        uPart.thickness ? ` × ${formatDim(uPart.thickness, unitSystem)}` : ''
+      }\n  ${reason}`;
     });
 
     if (stockGaps.length > 0) {
@@ -909,7 +907,14 @@ export default function CutListNesting() {
                 </label>
                 <select
                   value={activeStrategy}
-                  onChange={(e) => setActiveStrategy(e.target.value as CuttingStrategy)}
+                  onChange={(e) => {
+                    const next = e.target.value as CuttingStrategy;
+                    setActiveStrategy(next);
+                    if (isGenerated || store.activeCuttingPlan) {
+                      store.clearActiveCuttingPlan();
+                      setIsGenerated(true);
+                    }
+                  }}
                   className="w-full bg-[#121417] border border-gray-800 hover:border-gray-700 focus:border-orange-500 rounded-xl px-3.5 py-3 text-xs font-mono font-bold text-white focus:outline-none cursor-pointer"
                 >
                   {(
@@ -952,8 +957,8 @@ export default function CutListNesting() {
                 >
                   <CheckCircle2 className="w-4 h-4" />{' '}
                   {store.activeCuttingPlan && isGenerated
-                    ? `Regenerate (${totalBoardsRequired})`
-                    : `Generate instructions (${totalBoardsRequired})`}
+                    ? 'Regenerate'
+                    : 'Generate instructions'}
                 </button>
               </div>
             </div>
