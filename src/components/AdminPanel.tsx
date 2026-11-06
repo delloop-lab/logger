@@ -9,13 +9,15 @@ import {
   FolderKanban,
   RefreshCw,
   AlertTriangle,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import AdminBarChart from '@/components/AdminBarChart';
 import { loadAdminDashboard, type AdminDashboardData } from '@/lib/supabase/admin-stats';
 import { formatAppVersion } from '@/lib/version';
 import { getSupabase } from '@/lib/supabase/client';
+import { useAppStore } from '@/lib/store';
 import { notify, toast } from '@/lib/notify';
-import { Trash2 } from 'lucide-react';
 
 function fmtWhen(iso: string | null): string {
   if (!iso) return '—';
@@ -47,9 +49,11 @@ function StatCard({
 }
 
 export default function AdminPanel() {
+  const resetWorkshopData = useAppStore((s) => s.resetWorkshopData);
   const [data, setData] = useState<AdminDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAllHits, setShowAllHits] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -102,6 +106,9 @@ export default function AdminPanel() {
   };
 
   const totals = data?.totals;
+  const allHits = data?.recentHits || [];
+  const visibleHits = showAllHits ? allHits : allHits.slice(0, 10);
+  const hasMoreHits = allHits.length > 10;
 
   return (
     <div className="space-y-6">
@@ -242,9 +249,18 @@ export default function AdminPanel() {
       </div>
 
       <div className="bg-[#1e2228] border border-gray-800 rounded-2xl shadow-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2">
-          <MousePointerClick className="w-4 h-4 text-orange-500" />
-          <h3 className="text-sm font-bold text-white">Recent page hits</h3>
+        <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <MousePointerClick className="w-4 h-4 text-orange-500" />
+            <h3 className="text-sm font-bold text-white">Recent page hits</h3>
+          </div>
+          {allHits.length > 0 ? (
+            <span className="text-[11px] text-gray-500 font-mono">
+              {showAllHits
+                ? `${allHits.length} shown`
+                : `Last ${Math.min(10, allHits.length)} of ${allHits.length}`}
+            </span>
+          ) : null}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -257,14 +273,16 @@ export default function AdminPanel() {
               </tr>
             </thead>
             <tbody>
-              {(data?.recentHits || []).length === 0 ? (
+              {allHits.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-3 py-6 text-center text-gray-500">
-                    {loading ? 'Loading…' : 'No hits yet. Browse tabs while signed in to generate data.'}
+                    {loading
+                      ? 'Loading…'
+                      : 'No hits yet. Browse tabs while signed in to generate data.'}
                   </td>
                 </tr>
               ) : (
-                (data?.recentHits || []).map((h) => (
+                visibleHits.map((h) => (
                   <tr key={h.id} className="border-t border-gray-800/80 text-gray-300">
                     <td className="px-3 py-2 font-mono text-[11px]">{fmtWhen(h.createdAt)}</td>
                     <td className="px-3 py-2">{h.tab}</td>
@@ -276,6 +294,42 @@ export default function AdminPanel() {
             </tbody>
           </table>
         </div>
+        {hasMoreHits ? (
+          <div className="px-4 py-3 border-t border-gray-800">
+            <button
+              type="button"
+              onClick={() => setShowAllHits((v) => !v)}
+              className="text-xs font-bold text-orange-400 hover:text-orange-300 cursor-pointer bg-transparent border-0 p-0"
+            >
+              {showAllHits ? 'Show last 10 only' : `Show all ${allHits.length}`}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="bg-red-950/25 border border-red-900/50 px-5 py-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="text-xs text-gray-300">
+          <strong className="text-red-300 uppercase tracking-wide mr-2">Danger Zone — Start Fresh:</strong>
+          Clears inventory, offcuts, saved projects, and completed cuts.
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            const ok = await notify.confirm({
+              title: 'Warning: wipe workshop data?',
+              message:
+                'This deletes all boards, finished pieces, offcuts, projects, and cut progress. This cannot be undone.',
+              confirmLabel: 'Wipe everything',
+              danger: true,
+            });
+            if (!ok) return;
+            resetWorkshopData();
+            toast.success('Workshop cleared, log stock and start a new project.');
+          }}
+          className="px-4 py-2 bg-red-950 hover:bg-red-900 border border-red-700/60 text-red-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <RotateCcw className="w-3.5 h-3.5" /> Wipe Inventory
+        </button>
       </div>
     </div>
   );

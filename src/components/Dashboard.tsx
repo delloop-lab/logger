@@ -52,9 +52,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
   const stats = [
     {
-      label: 'Available boards',
+      label: 'Available stock',
       value: String(availablePieces),
-      hint: `${availableBoards.length} lot${availableBoards.length === 1 ? '' : 's'}, ${offcutPieces} reusable offcuts`,
+      hint: `${offcutPieces} offcut${offcutPieces === 1 ? '' : 's'} in stock`,
       tone: 'text-white',
     },
     {

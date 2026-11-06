@@ -12,49 +12,135 @@ const DEMO_LOCATIONS = [
   'Offcut Bin',
 ];
 
+function demoBoard(
+  partial: Omit<Board, 'createdAt' | 'status'> &
+    Partial<Pick<Board, 'createdAt' | 'status' | 'classification' | 'notes'>>
+): Board {
+  return {
+    createdAt: new Date().toISOString(),
+    status: 'active',
+    ...partial,
+  };
+}
+
 /** Sample workshop shown while signed out (never persisted to cloud). */
 export function createDemoWorkspace(): WorkspaceData {
+  // 20 full stock pieces + 23 reusable offcuts = 43 available stock
   const boards: Board[] = [
-    {
+    demoBoard({
       id: 'demo-board-1',
-      tagId: 'PIN-101-1',
+      tagId: 'PIN-101',
       species: 'Pine / Pallet',
       source: 'Pallet',
       length: 1200,
       width: 100,
       thickness: 18,
-      quantity: 1,
+      quantity: 8,
       location: 'Rack 1',
-      createdAt: new Date().toISOString(),
-      status: 'active',
       notes: 'Demo stock',
-    },
-    {
+    }),
+    demoBoard({
       id: 'demo-board-2',
-      tagId: 'PIN-102-1',
+      tagId: 'PIN-102',
       species: 'Pine / Pallet',
       source: 'Pallet',
       length: 900,
       width: 90,
       thickness: 18,
-      quantity: 1,
+      quantity: 5,
       location: 'Rack 1',
-      createdAt: new Date().toISOString(),
-      status: 'active',
-    },
-    {
+      notes: 'Demo stock',
+    }),
+    demoBoard({
       id: 'demo-board-3',
-      tagId: 'OAK-201-1',
+      tagId: 'OAK-201',
       species: 'European Oak',
       source: 'Purchased',
       length: 600,
       width: 120,
       thickness: 20,
-      quantity: 1,
+      quantity: 4,
       location: 'Rack 2',
-      createdAt: new Date().toISOString(),
-      status: 'active',
-    },
+      notes: 'Demo stock',
+    }),
+    demoBoard({
+      id: 'demo-board-4',
+      tagId: 'PLY-301',
+      species: 'Plywood',
+      source: 'Purchased',
+      length: 1220,
+      width: 610,
+      thickness: 12,
+      quantity: 3,
+      location: 'Rack 3',
+      notes: 'Demo stock',
+    }),
+    // 23 reusable offcuts
+    demoBoard({
+      id: 'demo-offcut-1',
+      tagId: 'PIN-101-OC1',
+      species: 'Pine / Pallet',
+      source: 'Offcut',
+      length: 420,
+      width: 95,
+      thickness: 18,
+      quantity: 6,
+      location: 'Offcut Bin',
+      classification: 'reusable_offcut',
+      notes: 'Demo offcut',
+    }),
+    demoBoard({
+      id: 'demo-offcut-2',
+      tagId: 'PIN-102-OC1',
+      species: 'Pine / Pallet',
+      source: 'Offcut',
+      length: 280,
+      width: 85,
+      thickness: 18,
+      quantity: 5,
+      location: 'Offcut Bin',
+      classification: 'reusable_offcut',
+      notes: 'Demo offcut',
+    }),
+    demoBoard({
+      id: 'demo-offcut-3',
+      tagId: 'OAK-201-OC1',
+      species: 'European Oak',
+      source: 'Offcut',
+      length: 310,
+      width: 110,
+      thickness: 20,
+      quantity: 4,
+      location: 'Small Rack',
+      classification: 'reusable_offcut',
+      notes: 'Demo offcut',
+    }),
+    demoBoard({
+      id: 'demo-offcut-4',
+      tagId: 'PLY-301-OC1',
+      species: 'Plywood',
+      source: 'Offcut',
+      length: 450,
+      width: 200,
+      thickness: 12,
+      quantity: 5,
+      location: 'Under Cabinet',
+      classification: 'reusable_offcut',
+      notes: 'Demo offcut',
+    }),
+    demoBoard({
+      id: 'demo-offcut-5',
+      tagId: 'MAP-401-OC1',
+      species: 'Maple',
+      source: 'Offcut',
+      length: 250,
+      width: 70,
+      thickness: 19,
+      quantity: 3,
+      location: 'Offcut Bin',
+      classification: 'reusable_offcut',
+      notes: 'Demo offcut',
+    }),
   ];
 
   const parts: CutPart[] = [

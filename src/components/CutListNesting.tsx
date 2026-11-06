@@ -967,6 +967,26 @@ export default function CutListNesting() {
             </p>
           </div>
         </div>
+
+        {/* Signed-out demo: sample cut sheet under Step 3 */}
+        {store.demoPreview && (
+          <div className="bg-[#1e2228] border border-orange-900/50 p-5 rounded-2xl shadow-xl space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-800">
+                Demo example
+              </span>
+              <h4 className="text-sm font-bold text-white">Sample cut plan</h4>
+            </div>
+            <p className="text-[11px] text-gray-500">
+              Log in or create a free account to generate shop sheets like this from your own stock.
+            </p>
+            <img
+              src="/help/help-cutting-sheet.png"
+              alt="Sample Logger cutting sheet: pull stock, cut dimensions, offcut tag, and shop drawing"
+              className="w-full rounded-xl border border-gray-700 bg-white"
+            />
+          </div>
+        )}
       </div>
 
       {/* Printable cutting sheets only */}
