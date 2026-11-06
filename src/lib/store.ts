@@ -159,6 +159,8 @@ export type WorkspaceData = {
   lumberTypes: string[];
   savedProjects: SavedProject[];
   activeProjectName: string;
+  /** Description / build notes for the open project (shown in Projects & Cuts and What Can I Build). */
+  activeProjectDescription?: string;
   activeParts: CutPart[];
   completedOperations: string[];
   offcutSettings: OffcutSettings;
@@ -253,6 +255,7 @@ interface AppState extends WorkspaceData {
   undoAllCuts: () => { ok: true; message: string } | { ok: false; message: string };
 
   setActiveProjectName: (name: string) => void;
+  setActiveProjectDescription: (description: string) => void;
   setActiveParts: (parts: CutPart[]) => void;
   addPartToActiveProject: (part: CutPart) => void;
   updatePartInActiveProject: (part: CutPart) => void;
@@ -371,6 +374,7 @@ const FRESH_STATE: WorkspaceData = {
   storageLocations: [...DEFAULT_LOCATIONS],
   lumberTypes: [...DEFAULT_LUMBER_TYPES],
   activeProjectName: 'New Project',
+  activeProjectDescription: '',
   activeParts: [],
   savedProjects: [],
   completedOperations: [],
@@ -451,9 +455,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const recovered =
       cloudProjects.length === 0 ? buildRecoveredWorkshopProjects() : [];
     const savedProjects = cloudProjects.length > 0 ? cloudProjects : recovered;
+    const activeMatch = savedProjects.find(
+      (p) => projectNameKey(p.name) === projectNameKey(data.activeProjectName || '')
+    );
     set({
       ...data,
       savedProjects,
+      activeProjectDescription:
+        data.activeProjectDescription ?? activeMatch?.description ?? '',
       lumberTypes: mergeLumberTypesWithStock(
         data.lumberTypes,
         (data.boards || []).map((b) => b.species)
@@ -752,8 +761,25 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   setActiveProjectName: (name) =>
+    set((state) => {
+      const match = state.savedProjects.find(
+        (p) => projectNameKey(p.name) === projectNameKey(name)
+      );
+      return {
+        activeProjectName: name,
+        activeProjectDescription: match
+          ? match.description ?? state.activeProjectDescription
+          : state.activeProjectDescription,
+        cloudRevision: state.cloudRevision + 1,
+      };
+    }),
+
+  setActiveProjectDescription: (description) =>
     set((state) => ({
-      activeProjectName: name,
+      activeProjectDescription: description,
+      savedProjects: patchSavedProject(state.savedProjects, state.activeProjectName, {
+        description: description.trim() || undefined,
+      }),
       cloudRevision: state.cloudRevision + 1,
     })),
 
@@ -828,8 +854,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }),
 
   saveCuttingPlanToActiveProject: (plan) => {
-    const { activeProjectName, activeParts, activeKerfMm, savedProjects, completedOperations, cloudRevision } =
-      get();
+    const {
+      activeProjectName,
+      activeProjectDescription,
+      activeParts,
+      activeKerfMm,
+      savedProjects,
+      completedOperations,
+      cloudRevision,
+    } = get();
     const name = activeProjectName.trim();
     if (!name || name.toLowerCase() === 'new project' || activeParts.length === 0) {
       set({ activeCuttingPlan: plan, cloudRevision: cloudRevision + 1 });
@@ -840,6 +873,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const completedCutOps = completedOperations.filter((op) => op.startsWith(prefix));
     const existingIdx = savedProjects.findIndex((p) => projectNameKey(p.name) === projectNameKey(name));
     const existing = existingIdx >= 0 ? savedProjects[existingIdx] : undefined;
+    const descTrim = activeProjectDescription?.trim();
 
     const projectData: SavedProject = {
       id: existing?.id ?? Date.now().toString(),
@@ -853,7 +887,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       kerfMm: activeKerfMm,
       status: preservedProjectStatus(existing),
       pauseReason: existing?.status === 'paused' ? existing.pauseReason : undefined,
-      description: existing?.description,
+      description: descTrim ? descTrim : existing?.description,
       difficulty: existing?.difficulty,
       cuttingPlan: plan,
       completedCutOps,
@@ -879,6 +913,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   saveCurrentProject: () => {
     const {
       activeProjectName,
+      activeProjectDescription,
       activeParts,
       activeKerfMm,
       savedProjects,
@@ -894,6 +929,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
     const existing = existingIdx >= 0 ? savedProjects[existingIdx] : undefined;
     const name = activeProjectName.trim();
+    const descTrim = activeProjectDescription?.trim();
     const prefix = `${name}-`;
     const completedCutOps = completedOperations.filter((op) => op.startsWith(prefix));
     const projectData: SavedProject = {
@@ -908,7 +944,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       kerfMm: activeKerfMm,
       status: preservedProjectStatus(existing),
       pauseReason: existing?.status === 'paused' ? existing.pauseReason : undefined,
-      description: existing?.description,
+      description: descTrim !== undefined ? (descTrim || undefined) : existing?.description,
       difficulty: existing?.difficulty,
       cuttingPlan: activeCuttingPlan || undefined,
       completedCutOps,
@@ -933,6 +969,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   pauseActiveProject: (reason) => {
     const {
       activeProjectName,
+      activeProjectDescription,
       activeParts,
       activeKerfMm,
       savedProjects,
@@ -951,6 +988,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
     const existingIdx = savedProjects.findIndex((p) => p.name.toLowerCase() === name.toLowerCase());
     const existing = existingIdx >= 0 ? savedProjects[existingIdx] : undefined;
+    const descTrim = activeProjectDescription?.trim();
     const prefix = `${name}-`;
     const projectData: SavedProject = {
       id: existing?.id ?? Date.now().toString(),
@@ -964,7 +1002,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       kerfMm: activeKerfMm,
       status: 'paused',
       pauseReason: reason.trim() || 'Waiting for matching stock.',
-      description: existing?.description,
+      description: descTrim ? descTrim : existing?.description,
       difficulty: existing?.difficulty,
       // Drop frozen nest — Resume must re-run against whatever stock is logged later
       cuttingPlan: undefined,
@@ -981,6 +1019,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({
       savedProjects: nextSaved,
       activeProjectName: 'New Project',
+      activeProjectDescription: '',
       activeParts: [],
       activeKerfMm: defaultKerfMm,
       activeCuttingPlan: null,
@@ -1020,6 +1059,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({
       savedProjects: nextSaved,
       activeProjectName: proj.name,
+      activeProjectDescription: proj.description || '',
       activeParts: proj.parts,
       activeKerfMm:
         proj.kerfMm != null && Number.isFinite(proj.kerfMm)
@@ -1044,6 +1084,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const withoutProj = completedOperations.filter((op) => !op.startsWith(prefix));
       set({
         activeProjectName: existing.name,
+        activeProjectDescription: existing.description || '',
         activeParts: existing.parts,
         activeKerfMm:
           existing.kerfMm != null && Number.isFinite(existing.kerfMm)
@@ -1069,6 +1110,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({
       savedProjects: [projectData, ...savedProjects],
       activeProjectName: name,
+      activeProjectDescription: '',
       activeParts: [],
       activeKerfMm: defaultKerfMm,
       activeCuttingPlan: null,
@@ -1128,7 +1170,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   updateProjectShowcase: (id, meta) => {
-    const { savedProjects, cloudRevision } = get();
+    const { savedProjects, activeProjectName, cloudRevision } = get();
     const idx = savedProjects.findIndex((p) => p.id === id);
     if (idx < 0) return { ok: false, message: 'Project not found.' };
     const existing = savedProjects[idx];
@@ -1137,8 +1179,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
       ...(meta.description !== undefined ? { description: meta.description.trim() } : {}),
       ...(meta.difficulty !== undefined ? { difficulty: meta.difficulty } : {}),
     };
+    const isActive = projectNameKey(existing.name) === projectNameKey(activeProjectName);
     set({
       savedProjects: savedProjects.map((p, i) => (i === idx ? next : p)),
+      ...(isActive && meta.description !== undefined
+        ? { activeProjectDescription: meta.description.trim() }
+        : {}),
       cloudRevision: cloudRevision + 1,
     });
     return { ok: true };
@@ -1147,6 +1193,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   syncActiveProjectToLibrary: () => {
     const {
       activeProjectName,
+      activeProjectDescription,
       activeParts,
       activeKerfMm,
       activeCuttingPlan,
@@ -1161,6 +1208,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       (p) => projectNameKey(p.name) === projectNameKey(name)
     );
     const existing = existingIdx >= 0 ? savedProjects[existingIdx] : undefined;
+    const descTrim = activeProjectDescription?.trim();
     const prefix = `${name}-`;
     const fromOps = completedOperations.filter((op) => op.startsWith(prefix));
     const projectData: SavedProject = {
@@ -1177,7 +1225,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       kerfMm: activeKerfMm,
       status: preservedProjectStatus(existing),
       pauseReason: existing?.status === 'paused' ? existing.pauseReason : undefined,
-      description: existing?.description,
+      description: descTrim ? descTrim : existing?.description,
       difficulty: existing?.difficulty || 'Beginner',
       // Workbench plan is source of truth — never resurrect a cleared nest from the library copy
       cuttingPlan: activeCuttingPlan || undefined,
@@ -1227,6 +1275,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       : null;
     set({
       activeProjectName: proj.name,
+      activeProjectDescription: proj.description || '',
       activeParts: proj.parts,
       activeKerfMm:
         proj.kerfMm != null && Number.isFinite(proj.kerfMm)
@@ -1272,6 +1321,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         ...(isDeletingActive
           ? {
               activeProjectName: 'New Project',
+              activeProjectDescription: '',
               activeParts: [],
               activeKerfMm: state.defaultKerfMm,
               activeCuttingPlan: null,
@@ -1293,6 +1343,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   startNewProject: () => {
     set((state) => ({
       activeProjectName: 'New Project',
+      activeProjectDescription: '',
       activeParts: [],
       activeKerfMm: state.defaultKerfMm,
       activeCuttingPlan: null,

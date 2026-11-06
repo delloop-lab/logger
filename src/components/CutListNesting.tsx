@@ -518,6 +518,11 @@ export default function CutListNesting() {
                         {count} pcs, {proj.date}
                         {isCompleted && proj.difficulty ? ` · ${proj.difficulty}` : ''}
                       </span>
+                      {proj.description && (
+                        <span className="text-[11px] text-gray-400 block line-clamp-1 mt-0.5 font-sans">
+                          {proj.description}
+                        </span>
+                      )}
                       {isCompleted && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 mt-0.5">
                           Completed build · What Can I Build
@@ -599,28 +604,45 @@ export default function CutListNesting() {
               ? `Working on “${activeProjectName.trim()}”. Continue to step 2.`
               : 'Type a real name before adding parts, offcuts and finished pieces will be tagged to it.'}
           </p>
-          <div className="pt-2 max-w-xs space-y-1">
-            <label className="block text-xs font-medium text-gray-400">
-              Saw kerf for this project ({u})
-            </label>
-            <input
-              type="number"
-              step="any"
-              min="0"
-              value={mmToDisplay(activeKerfMm, unitSystem, unitSystem === 'imperial' ? 3 : 1)}
-              onChange={(e) => {
-                const v = displayToMm(parseFloat(e.target.value), unitSystem);
-                if (!isNaN(v) && v >= 0) {
-                  setActiveKerfMm(v);
-                  setIsGenerated(false);
-                }
-              }}
-              className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
-            />
-            <p className="text-[10px] text-gray-500">
-              Default from Settings is {formatDim(defaultKerfMm, unitSystem)}. Change here if this
-              job uses a different blade, nesting updates when you generate again.
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-400">
+                Project description <span className="text-gray-600">(shown in What Can I Build?)</span>
+              </label>
+              <input
+                type="text"
+                value={store.activeProjectDescription || ''}
+                onChange={(e) => store.setActiveProjectDescription(e.target.value)}
+                placeholder="e.g. Edge-glued pine cutting board with juice groove"
+                className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+              />
+              <p className="text-[10px] text-gray-500">
+                Saved with this project and displayed on its card in What Can I Build?.
+              </p>
+            </div>
+            <div className="max-w-xs space-y-1">
+              <label className="block text-xs font-medium text-gray-400">
+                Saw kerf for this project ({u})
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={mmToDisplay(activeKerfMm, unitSystem, unitSystem === 'imperial' ? 3 : 1)}
+                onChange={(e) => {
+                  const v = displayToMm(parseFloat(e.target.value), unitSystem);
+                  if (!isNaN(v) && v >= 0) {
+                    setActiveKerfMm(v);
+                    setIsGenerated(false);
+                  }
+                }}
+                className="w-full bg-[#121417] border border-gray-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
+              />
+              <p className="text-[10px] text-gray-500">
+                Default from Settings is {formatDim(defaultKerfMm, unitSystem)}. Change here if this
+                job uses a different blade, nesting updates when you generate again.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -880,76 +902,64 @@ export default function CutListNesting() {
           </p>
 
           <div className="space-y-2 pt-1">
-            <label className="block text-xs font-mono font-bold text-gray-300 uppercase tracking-wide">
-              Cutting strategy preference
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {(
-                [
-                  'auto',
-                  'crosscut-first',
-                  'rip-first',
-                  'preserve-offcut',
-                ] as CuttingStrategy[]
-              ).map((key) => {
-                const meta = STRATEGY_META[key];
-                const selected = activeStrategy === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setActiveStrategy(key)}
-                    className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${
-                      selected
-                        ? 'bg-orange-950/40 border-orange-500 text-white'
-                        : 'bg-[#121417] border-gray-800 hover:border-gray-700 text-gray-300'
-                    }`}
-                  >
-                    <div className="text-xs font-bold font-mono flex items-center justify-between gap-2">
-                      <span>{meta.label}</span>
-                      {selected && (
-                        <span className="text-[10px] bg-orange-600 text-white px-2 py-0.5 rounded">
-                          Selected
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-gray-400 mt-1 leading-snug">
-                      {meta.description}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+              <div className="flex-1 min-w-0 space-y-1">
+                <label className="block text-xs font-mono font-bold text-gray-300 uppercase tracking-wide">
+                  Cutting Strategy Preference
+                </label>
+                <select
+                  value={activeStrategy}
+                  onChange={(e) => setActiveStrategy(e.target.value as CuttingStrategy)}
+                  className="w-full bg-[#121417] border border-gray-800 hover:border-gray-700 focus:border-orange-500 rounded-xl px-3.5 py-3 text-xs font-mono font-bold text-white focus:outline-none cursor-pointer"
+                >
+                  {(
+                    [
+                      'auto',
+                      'crosscut-first',
+                      'rip-first',
+                      'preserve-offcut',
+                    ] as CuttingStrategy[]
+                  ).map((key) => (
+                    <option key={key} value={key} className="bg-[#121417] text-white">
+                      {STRATEGY_META[key].label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              type="button"
-              disabled={activeParts.length === 0 || !projectNamed}
-              onClick={handleSaveCurrentProject}
-              className={`flex-1 font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-xs ${
-                activeParts.length === 0 || !projectNamed
-                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                  : 'bg-gray-800 hover:bg-gray-700 text-white cursor-pointer'
-              }`}
-            >
-              <Save className="w-4 h-4" /> Save project
-            </button>
-            <button
-              type="button"
-              disabled={activeParts.length === 0 || !projectNamed}
-              onClick={handleGenerateInstructions}
-              className={`flex-1 font-semibold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-xs ${
-                activeParts.length === 0 || !projectNamed
-                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 cursor-pointer'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4" />{' '}
-              {store.activeCuttingPlan && isGenerated
-                ? `Regenerate (${totalBoardsRequired})`
-                : `Generate instructions (${totalBoardsRequired})`}
-            </button>
+              <div className="flex flex-col sm:flex-row gap-2 lg:shrink-0">
+                <button
+                  type="button"
+                  disabled={activeParts.length === 0 || !projectNamed}
+                  onClick={handleSaveCurrentProject}
+                  className={`px-5 font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-xs ${
+                    activeParts.length === 0 || !projectNamed
+                      ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                      : 'bg-gray-800 hover:bg-gray-700 text-white cursor-pointer'
+                  }`}
+                >
+                  <Save className="w-4 h-4" /> Save project
+                </button>
+                <button
+                  type="button"
+                  disabled={activeParts.length === 0 || !projectNamed}
+                  onClick={handleGenerateInstructions}
+                  className={`px-6 font-semibold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-xs ${
+                    activeParts.length === 0 || !projectNamed
+                      ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 cursor-pointer'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />{' '}
+                  {store.activeCuttingPlan && isGenerated
+                    ? `Regenerate (${totalBoardsRequired})`
+                    : `Generate instructions (${totalBoardsRequired})`}
+                </button>
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-400 leading-snug">
+              {STRATEGY_META[activeStrategy]?.description}
+            </p>
           </div>
         </div>
       </div>
@@ -957,15 +967,6 @@ export default function CutListNesting() {
       {/* Printable cutting sheets only */}
       {isGenerated && activeParts.length > 0 && (
         <div ref={sheetsAnchorRef} className="space-y-6 pt-4 scroll-mt-4">
-          {store.activeCuttingPlan?.placements?.length ? (
-            <div className="no-print rounded-xl border border-emerald-700/40 bg-emerald-950/25 px-4 py-2.5 text-xs text-emerald-200/90">
-              Saved cutting plan restored for <strong className="text-white">{activeProjectName}</strong>
-              {store.activeCuttingPlan.savedAt
-                ? ` · ${new Date(store.activeCuttingPlan.savedAt).toLocaleString()}`
-                : ''}
-              . Diagrams below are the confirmed sequence for this project.
-            </div>
-          ) : null}
           <CutListDrawing ignorePartThickness={allowThinStock} />
         </div>
       )}

@@ -6,7 +6,7 @@ export const APP_CHANNEL = 'BETA' as const;
  * Displayed as `BETA V.09.560`.
  * Bumped by `npm run version:bump` (+010 on the build segment) after successful push.
  */
-export const APP_VERSION = '09.630';
+export const APP_VERSION = '09.640';
 
 export function formatAppVersion(version = APP_VERSION, channel = APP_CHANNEL): string {
   return `${channel} V.${version}`;

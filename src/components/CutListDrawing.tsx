@@ -202,7 +202,14 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
     })();
   }, [partsKey, unallocKey, unallocatedExplain, pauseActiveProject]);
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    const prevTitle = document.title;
+    document.title = 'Precision cut lists by Logger™. Less guesswork, zero wasted timber.';
+    window.print();
+    setTimeout(() => {
+      document.title = prevTitle;
+    }, 500);
+  };
 
   const openConfirmationModal = (step: Placement) => {
     setConfirmStep(step);
@@ -620,16 +627,10 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
 
   return (
     <div id="timbervault-cut-sheets" className="space-y-6 font-sans">
-      {useSavedPlan && (
-        <div className="no-print bg-emerald-950/30 border border-emerald-700/40 px-4 py-2.5 rounded-xl text-xs text-emerald-200/90 flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-          Using the cutting plan saved with this project
-          {activeCuttingPlan?.savedAt
-            ? ` (${new Date(activeCuttingPlan.savedAt).toLocaleString()})`
-            : ''}
-          . Confirmed cuts keep this sequence until you regenerate or edit parts.
-        </div>
-      )}
+      <div className="hidden print:flex items-center justify-between border-b-2 border-zinc-900 pb-2 mb-3 text-xs font-mono font-bold text-zinc-900">
+        <span>Precision cut lists by Logger™. Less guesswork, zero wasted timber.</span>
+        <span className="uppercase">{activeProjectName}</span>
+      </div>
       {unallocatedExplain.length > 0 && (
         <div className="no-print bg-red-950/40 border border-red-600/50 p-4 rounded-xl space-y-3">
           <div className="flex items-start gap-2 text-red-300 text-sm font-bold">

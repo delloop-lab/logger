@@ -23,6 +23,7 @@ import {
   QrCode,
   LogOut,
   LogIn,
+  UserPlus,
   Shield,
 } from 'lucide-react';
 import { toast } from '@/lib/notify';
@@ -55,6 +56,7 @@ const BASE_TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [loginGateOpen, setLoginGateOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const cloudUserId = useAppStore((s) => s.cloudUserId);
@@ -110,8 +112,9 @@ export default function Page() {
     }
   };
 
-  const openLogin = () => {
+  const openLogin = (mode: 'signin' | 'signup' = 'signin') => {
     setLoginGateOpen(false);
+    setAuthMode(mode);
     setAuthOpen(true);
   };
 
@@ -179,14 +182,24 @@ export default function Page() {
                   <LogOut className="w-3.5 h-3.5" /> Sign out
                 </button>
               ) : (
-                <button
-                  type="button"
-                  data-login-trigger
-                  onClick={openLogin}
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-orange-600 hover:bg-orange-500 text-xs font-bold rounded-xl cursor-pointer text-white shadow-lg shadow-orange-600/20"
-                >
-                  <LogIn className="w-3.5 h-3.5" /> Log in
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    data-login-trigger
+                    onClick={() => openLogin('signin')}
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-orange-600 hover:bg-orange-500 text-xs font-bold rounded-xl cursor-pointer text-white shadow-lg shadow-orange-600/20"
+                  >
+                    <LogIn className="w-3.5 h-3.5" /> Log in
+                  </button>
+                  <button
+                    type="button"
+                    data-login-trigger
+                    onClick={() => openLogin('signup')}
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs font-bold rounded-xl cursor-pointer text-white"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-orange-400" /> Create account
+                  </button>
+                </div>
               )}
             </div>
 
@@ -252,19 +265,33 @@ export default function Page() {
             You need to log in or register to see stock, projects, cutting drawings, and more.
             It&apos;s free!
           </p>
-          <button
-            type="button"
-            data-login-trigger
-            onClick={openLogin}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-500 text-white text-sm font-bold rounded-xl cursor-pointer"
-          >
-            <LogIn className="w-4 h-4" /> Log in
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <button
+              type="button"
+              data-login-trigger
+              onClick={() => openLogin('signin')}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-500 text-white text-sm font-bold rounded-xl cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" /> Log in
+            </button>
+            <button
+              type="button"
+              data-login-trigger
+              onClick={() => openLogin('signup')}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white text-sm font-bold rounded-xl cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4 text-orange-400" /> Create account
+            </button>
+          </div>
         </AppModal>
       </div>
 
       <div data-auth-modal>
-        <AuthModal open={authOpen && !signedIn} onClose={() => setAuthOpen(false)} />
+        <AuthModal
+          open={authOpen && !signedIn}
+          onClose={() => setAuthOpen(false)}
+          initialMode={authMode}
+        />
       </div>
     </>
   );
