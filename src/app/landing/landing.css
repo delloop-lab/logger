@@ -1,0 +1,114 @@
+/* Scoped TimberVault marketing landing — does not alter the workshop app theme. */
+
+/* Neutralize workshop shell chrome only while this page is mounted */
+body:has(.tv-landing) {
+  background: #f9f4ec !important;
+  color: #241710 !important;
+  padding-bottom: 0 !important;
+}
+
+.tv-landing {
+  --tv-radius: 0.375rem;
+  --tv-background: #f9f4ec;
+  --tv-foreground: #241710;
+  --tv-card: #fffbf6;
+  --tv-primary: #ac571d;
+  --tv-primary-foreground: #fcf8f1;
+  --tv-secondary: #ede3d6;
+  --tv-muted: #ede7dd;
+  --tv-muted-foreground: #6b594e;
+  --tv-border: #dacfc3;
+  --tv-bark: #1e130e;
+  --tv-bark-foreground: #f3eadd;
+  --tv-font-display: "Fraunces", Georgia, serif;
+  --tv-font-sans: "Manrope", system-ui, sans-serif;
+
+  background: var(--tv-background);
+  color: var(--tv-foreground);
+  font-family: var(--tv-font-sans);
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+.tv-landing * {
+  border-color: var(--tv-border);
+  box-sizing: border-box;
+}
+
+.tv-landing h1,
+.tv-landing h2,
+.tv-landing h3 {
+  font-family: var(--tv-font-display);
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: inherit;
+  margin: 0;
+}
+
+.tv-landing p {
+  margin: 0;
+}
+
+.tv-landing a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.tv-landing ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tv-landing .eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--tv-primary);
+}
+
+.tv-landing .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--tv-radius);
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tv-landing .btn-primary {
+  background: var(--tv-primary);
+  color: var(--tv-primary-foreground);
+}
+
+.tv-landing .btn-primary:hover {
+  background: color-mix(in srgb, var(--tv-primary) 90%, black);
+}
+
+.tv-landing .btn-ghost {
+  border: 1px solid color-mix(in srgb, var(--tv-bark-foreground) 40%, transparent);
+  color: var(--tv-bark-foreground);
+}
+
+.tv-landing .btn-ghost:hover {
+  background: color-mix(in srgb, var(--tv-bark-foreground) 10%, transparent);
+}
+
+.tv-landing .section-pad {
+  max-width: 72rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+.tv-landing details > summary {
+  list-style: none;
+}
+
+.tv-landing details > summary::-webkit-details-marker {
+  display: none;
+}

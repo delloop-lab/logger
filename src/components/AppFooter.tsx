@@ -1,15 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import AppModal from '@/components/AppModal';
 import GettingStartedGuide from '@/components/GettingStartedGuide';
 import HelpGuide from '@/components/HelpGuide';
 import { formatAppVersion } from '@/lib/version';
 
 export default function AppFooter() {
+  const pathname = usePathname();
   const [helpOpen, setHelpOpen] = useState(false);
   const [gettingStartedOpen, setGettingStartedOpen] = useState(false);
   const versionLabel = formatAppVersion();
+
+  // Marketing landing is a standalone page — keep workshop chrome off it
+  if (pathname?.startsWith('/landing')) return null;
 
   return (
     <>
