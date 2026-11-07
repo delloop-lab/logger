@@ -81,13 +81,13 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
           ? 'Confirm your email'
           : mode === 'signup'
             ? 'Create account'
-            : 'Sign in'
+            : 'Logger In'
       }
       subtitle={
         awaitingEmailConfirm
           ? 'One more step to open your workshop.'
           : mode === 'signup'
-            ? 'Register a free account to save and sync your workshop.'
+            ? "Your workshop, finally under control. No cost. No fuss, no commitment. Just your email and you're in!"
             : 'Use your email to open your workshop.'
       }
       size="md"
@@ -108,7 +108,7 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
           </div>
           <p className="text-[11px] text-gray-500">
             Didn&apos;t get it? Check spam/junk. Each email can only register one Logger
-            account. If this address is already registered, sign in instead.
+            account. If this address is already registered, Logger In instead.
           </p>
           <button
             type="button"
@@ -167,7 +167,7 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
                   : 'bg-gray-800 hover:bg-gray-700'
               }`}
             >
-              <LogIn className="w-3.5 h-3.5" /> Sign in
+              <LogIn className="w-3.5 h-3.5" /> Logger In
             </button>
             <button
               type="button"

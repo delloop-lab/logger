@@ -13,8 +13,8 @@ export default function AppFooter() {
   const [gettingStartedOpen, setGettingStartedOpen] = useState(false);
   const versionLabel = formatAppVersion();
 
-  // Marketing landing is a standalone page — keep workshop chrome off it
-  if (pathname?.startsWith('/landing')) return null;
+  // Marketing home (/) and legacy /landing — keep workshop chrome off them
+  if (!pathname || pathname === '/' || pathname.startsWith('/landing')) return null;
 
   return (
     <>

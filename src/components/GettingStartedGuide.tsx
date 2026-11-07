@@ -20,7 +20,7 @@ export default function GettingStartedGuide() {
           your first optimized cut list.
         </p>
         <p className="text-[11px] text-gray-500">
-          Sign in first so your workshop stays in the cloud. Signed out browsing may only show demo
+          Logger In first so your workshop stays in the cloud. Signed out browsing may only show demo
           data.
         </p>
       </div>

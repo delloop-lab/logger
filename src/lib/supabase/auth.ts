@@ -43,7 +43,7 @@ export async function signUpWithEmail(
     if (isDuplicateEmailError(error.message)) {
       return {
         ok: false,
-        message: 'That email is already registered. Sign in instead, or use a different email.',
+        message: 'That email is already registered. Logger In instead, or use a different email.',
       };
     }
     return { ok: false, message: error.message };
@@ -57,7 +57,7 @@ export async function signUpWithEmail(
   if (!data.user.identities || data.user.identities.length === 0) {
     return {
       ok: false,
-      message: 'That email is already registered. Sign in instead, or use a different email.',
+      message: 'That email is already registered. Logger In instead, or use a different email.',
     };
   }
 
@@ -66,7 +66,7 @@ export async function signUpWithEmail(
     return {
       ok: true,
       user: data.user,
-      message: 'Check your email to confirm your address, then sign in.',
+      message: 'Check your email to confirm your address, then Logger In.',
     };
   }
 
@@ -87,7 +87,7 @@ export async function signInWithEmail(
     return { ok: false, message: error.message };
   }
   if (!data.user) {
-    return { ok: false, message: 'Sign in did not return a user.' };
+    return { ok: false, message: 'Logger In did not return a user.' };
   }
 
   return { ok: true, user: data.user, message: 'Signed in.' };

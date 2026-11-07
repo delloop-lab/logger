@@ -978,7 +978,7 @@ export default function CutListNesting() {
               <h4 className="text-sm font-bold text-white">Sample cut plan</h4>
             </div>
             <p className="text-[11px] text-gray-500">
-              Log in or create a free account to generate shop sheets like this from your own stock.
+              Logger In or create a free account to generate shop sheets like this from your own stock.
             </p>
             <img
               src="/help/help-cutting-sheet.png"

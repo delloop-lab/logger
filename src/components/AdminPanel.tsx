@@ -405,7 +405,7 @@ export default function AdminPanel() {
               {(data?.users || []).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-6 text-center text-gray-500">
-                    {loading ? 'Loading…' : 'No profiles yet. Users appear after they sign in.'}
+                    {loading ? 'Loading…' : 'No profiles yet. Users appear after they Logger In.'}
                   </td>
                 </tr>
               ) : (
