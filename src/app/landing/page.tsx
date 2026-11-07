@@ -4,8 +4,8 @@ const features = [
   {
     tag: 'A',
     title: "Know exactly what's in your workshop.",
-    name: 'Timber inventory management',
-    body: 'Record and organise your timber inventory with the details that matter.',
+    name: "Know what timber you've got",
+    body: 'Keep track of useful timber with the details that matter, from full boards to leftover pieces.',
     list: [
       'Wood species',
       'Length, width and thickness',
@@ -22,7 +22,7 @@ const features = [
     title: 'Give every board a digital identity.',
     name: 'QR identification',
     img: '/landing/qr-label.jpg',
-    body: 'Generate and print labels that connect physical timber to its digital inventory record. Scan the label and find the record.',
+    body: 'Generate and print labels that connect physical timber to its digital record. Scan the label and find what you need.',
     list: [
       'Unique stock ID',
       'Timber species',
@@ -36,7 +36,7 @@ const features = [
   {
     tag: 'C',
     title: 'Make better use of every board.',
-    name: 'Intelligent cut-list & nesting',
+    name: 'Plan your cuts with less guesswork',
     body: 'Plan how components can be cut from available stock, making smarter use of the material already in your workshop.',
     list: [
       'Required component dimensions',
@@ -51,7 +51,7 @@ const features = [
   {
     tag: 'D',
     title: 'Know exactly where every cut goes.',
-    name: 'PLAN YOUR CUTS',
+    name: 'Plan your cuts',
     img: '/landing/cut-plan.png',
     body: 'Turn your project dimensions and available timber into clear, practical cutting plans. See how each piece fits, understand where to cut and make better use of the timber you already have.',
     list: [
@@ -65,9 +65,9 @@ const features = [
   {
     tag: 'E',
     title: 'Turn forgotten offcuts into your next project.',
-    name: 'What Can I Build?',
+    name: 'Find a use for your offcuts',
     img: '/landing/offcuts.jpg',
-    body: 'Stop seeing offcuts as waste. Explore possible projects using the timber you already have.',
+    body: 'Stop seeing offcuts as waste. Work out what you can make with the timber you already have.',
     list: [
       'A small shelving unit',
       'A workshop organiser',
@@ -94,11 +94,29 @@ const features = [
   {
     tag: 'G',
     title: 'Know where everything lives.',
-    name: 'Workshop storage',
-    body: 'Organise inventory by storage location, rack, shelf, workbench or storage area, and keep it connected to its physical place.',
+    name: 'A little more order in your workshop',
+    body: 'Keep timber connected to its place, rack, shelf, workbench or storage area, without turning organisation into a chore.',
     list: ['Racks', 'Shelves', 'Workbenches', 'Storage areas'],
     foot: 'Find what you need without searching the entire workshop.',
   },
+];
+
+const steps = [
+  [
+    '1',
+    "Add what you've got",
+    'Record a board, an offcut or a batch of timber. Start small. No big inventory exercise.',
+  ],
+  [
+    '2',
+    'Let Logger do the thinking',
+    'Enter the pieces you need and generate a practical cutting plan.',
+  ],
+  [
+    '3',
+    'Get back to making',
+    'Spend less time calculating and searching, and more time at the workbench.',
+  ],
 ];
 
 const audiences = [
@@ -108,11 +126,11 @@ const audiences = [
   ],
   [
     'DIY enthusiasts & hobbyists',
-    'Bring order to growing timber collections, organise leftovers and discover new uses for existing material.',
+    'Bring a little more order to growing timber collections, find a use for leftovers and work out what you can make next.',
   ],
   [
     'Small workshops & makers',
-    'Keep inventory accessible and material organised without complicated enterprise software.',
+    'Keep useful timber accessible without complicated enterprise software.',
   ],
 ];
 
@@ -120,7 +138,7 @@ const compare = [
   ['Generic stock records', 'Timber-specific records'],
   ['Stock quantities', 'Individual boards and offcuts'],
   ['Manual identification', 'QR-coded timber labels'],
-  ['Basic inventory', 'Cutting and nesting tools'],
+  ['Basic inventory', 'Cutting plans with less guesswork'],
   ['Generic categories', 'Wood species and dimensions'],
   ['Static records', 'Workshop-focused workflows'],
 ];
@@ -131,8 +149,12 @@ const faqs = [
     'No. Logger is intended for anyone who works with timber, from professional makers to DIY enthusiasts.',
   ],
   [
+    'Do I need to catalogue my whole workshop first?',
+    'No. Add a few boards or offcuts when you need them. Start small and get useful results straight away.',
+  ],
+  [
     'Can I record individual offcuts?',
-    'Yes. Logger is designed to manage individual pieces as well as batches of timber.',
+    'Yes. Logger helps you keep track of individual pieces as well as batches of timber.',
   ],
   [
     'Can I print labels?',
@@ -140,11 +162,11 @@ const faqs = [
   ],
   [
     'Can I scan a timber label?',
-    'Yes. The QR identification workflow allows you to scan a label and retrieve the corresponding inventory record.',
+    'Yes. Scan a label and retrieve the corresponding timber record.',
   ],
   [
     'Can Logger help me plan cuts?',
-    'Yes. Its cutting and nesting functionality helps plan component layouts and make more intelligent use of available stock.',
+    'Yes. Enter the pieces you need and generate a practical cutting plan from the timber you already have.',
   ],
   [
     'Does it identify wood species from photographs?',
@@ -152,7 +174,7 @@ const faqs = [
   ],
   [
     'Do I need complicated inventory software?',
-    'No. Logger provides practical workshop tools without the overhead of a large business management system.',
+    'No. Logger fits around your workshop habits. You do not have to change how you work to use it.',
   ],
 ];
 
@@ -201,21 +223,27 @@ export default function LandingPage() {
               className="mt-6 max-w-3xl"
               style={{ fontSize: 'clamp(2.5rem, 6vw, 4.5rem)', lineHeight: 1.05 }}
             >
-              Know what timber you have. Know what you can make.
+              Spend less time organising timber. More time making things.
             </h1>
             <p
               className="mt-6 max-w-xl text-lg body-copy"
               style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)' }}
             >
-              Logger is totally free. It helps woodworkers organise their timber inventory, track
-              every board and offcut, plan cuts, reduce waste and make better use of the wood they
-              already own.
+              Logger is totally free. It is designed to fit around your workshop, not become another
+              job in it. Add a few boards or offcuts when you need them. Find what you&apos;ve got,
+              plan your cuts and get on with making.
+            </p>
+            <p
+              className="mt-4 max-w-xl text-lg body-copy font-bold"
+              style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 90%, transparent)' }}
+            >
+              No need to catalogue your entire workshop before you get started.
             </p>
             <div
               className="mt-6 flex flex-wrap gap-2 text-xs font-bold uppercase tracking-widest"
               style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 70%, transparent)' }}
             >
-              {['Timber inventory', 'QR identification', 'Cut planning'].map((t) => (
+              {['Know what you have', 'Plan your cuts', 'Get back to making'].map((t) => (
                 <span
                   key={t}
                   className="rounded-full px-3 py-1"
@@ -248,7 +276,8 @@ export default function LandingPage() {
                 color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)',
               }}
             >
-              Less searching. Less waste. More making.
+              Logger works around your woodworking habits. You don&apos;t have to change your habits
+              to use Logger.
             </p>
           </div>
         </section>
@@ -277,7 +306,7 @@ export default function LandingPage() {
               clear picture of what you&apos;ve already got.
             </p>
             <p className="font-bold" style={{ color: 'var(--tv-primary)' }}>
-              Logger changes that.
+              Logger changes that, without asking you to catalogue everything first.
             </p>
           </div>
         </section>
@@ -287,32 +316,61 @@ export default function LandingPage() {
           <div className="section-pad max-w-4xl py-24 text-center">
             <p className="eyebrow">The solution</p>
             <h2 className="mt-4" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
-              Your workshop deserves a better memory.
+              Built to fit around your workshop, not become another job in it.
             </h2>
             <p className="mt-6 text-lg body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
-              A central place to manage your timber inventory, from full-length boards to the
-              smallest useful offcuts. Record what you have, where it&apos;s stored, what it&apos;s
-              made from and what dimensions are available.
+              Keep track of useful timber, from full-length boards to the smallest useful offcuts.
+              Add what you need when you need it, find it again, plan your cuts and get back to making.
             </p>
             <div className="mt-10 grid gap-4 sm:grid-cols-3">
               {[
-                'Give every piece its own identity.',
-                'Find it when you need it.',
-                'Check what you own before buying more.',
+                'Add a few boards or offcuts when you need them.',
+                'Find what you have and plan your cuts.',
+                'Get on with making, without a big inventory exercise.',
               ].map((t) => (
                 <div
                   key={t}
-                  className="rounded-lg border p-6 text-lg"
+                  className="rounded-lg border p-6 text-lg body-copy"
                   style={{
                     background: 'var(--tv-card)',
-                    fontFamily: 'var(--tv-font-display)',
+                    fontFamily: 'var(--tv-font-sans)',
                     borderColor: 'var(--tv-border)',
+                    lineHeight: 1.45,
                   }}
                 >
                   {t}
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        {/* How little effort */}
+        <section id="how-it-works" className="section-pad py-24">
+          <p className="eyebrow">How little effort it takes</p>
+          <h2 className="mt-4 max-w-3xl" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
+            Start small. Get something useful straight away.
+          </h2>
+          <p className="mt-6 max-w-2xl text-lg body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
+            Try one board, one project or a handful of offcuts. No lengthy setup. No need to
+            catalogue your entire workshop before you get started.
+          </p>
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
+            {steps.map(([n, title, body]) => (
+              <div
+                key={n}
+                className="rounded-lg border p-6"
+                style={{ background: 'var(--tv-card)', borderColor: 'var(--tv-border)' }}
+              >
+                <p className="eyebrow">{n}</p>
+                <h3 className="mt-3 text-2xl" style={{ lineHeight: 1.3 }}>
+                  {title}
+                </h3>
+                <p className="mt-3 body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
+                  {body}
+                </p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -384,16 +442,34 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Bigger idea */}
+        {/* Central promise */}
         <section style={{ background: 'var(--tv-bark)', color: 'var(--tv-bark-foreground)' }}>
-          <div className="section-pad py-24">
-            <p className="eyebrow">The bigger idea</p>
-            <h2 className="mt-4 max-w-3xl" style={{ fontSize: 'clamp(2rem, 5vw, 3.75rem)' }}>
-              Stop buying timber you might already have.
+          <div className="section-pad py-24 max-w-4xl">
+            <p className="eyebrow">The real promise</p>
+            <h2 className="mt-4" style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', lineHeight: 1.15 }}>
+              You didn&apos;t take up woodworking to manage timber records.
             </h2>
+            <p
+              className="mt-6 text-2xl body-copy"
+              style={{
+                fontFamily: 'var(--tv-font-sans)',
+                color: 'color-mix(in srgb, var(--tv-bark-foreground) 90%, transparent)',
+                lineHeight: 1.45,
+              }}
+            >
+              You took it up to make things.
+            </p>
+            <p
+              className="mt-8 text-lg body-copy max-w-2xl"
+              style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)' }}
+            >
+              Logger takes care of the organising, planning and calculating, so you can spend more
+              time doing what you enjoy. It works around your woodworking habits. You don&apos;t have
+              to change your habits to use Logger.
+            </p>
             <div className="mt-14 grid gap-8 md:grid-cols-3">
               {[
-                ['Before buying more,', 'check your inventory.'],
+                ['Before buying more,', 'check what you already have.'],
                 ['Before throwing something away,', 'see whether it has another use.'],
                 ['Before cutting,', 'plan how to get the most from your stock.'],
               ].map(([a, b]) => (
@@ -413,12 +489,6 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
-            <p
-              className="mt-14 text-lg"
-              style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)' }}
-            >
-              Better organisation. Better decisions. Less unnecessary waste.
-            </p>
           </div>
         </section>
 
@@ -509,7 +579,7 @@ export default function LandingPage() {
                     +
                   </span>
                 </summary>
-                <p className="mt-3" style={{ color: 'var(--tv-muted-foreground)' }}>
+                <p className="mt-3 body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
                   {a}
                 </p>
               </details>
@@ -533,15 +603,15 @@ export default function LandingPage() {
             style={{ opacity: 0.2 }}
           />
           <div className="relative mx-auto max-w-3xl px-6 py-28 text-center">
-            <h2 style={{ fontSize: 'clamp(2rem, 5vw, 3.75rem)' }}>
-              Your timber. Your workshop. Your way.
+            <h2 style={{ fontSize: 'clamp(2rem, 5vw, 3.75rem)', lineHeight: 1.15 }}>
+              Spend less time organising timber. More time making things.
             </h2>
             <p
               className="mt-6 text-lg body-copy"
               style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)' }}
             >
-              Logger brings your timber inventory, offcuts, labels and cutting plans together in
-              one place. Spend less time searching for wood. Spend more time making things.
+              Logger takes care of the organising, planning and calculating, so you can spend more
+              time doing what you enjoy. Start with one board, one project or a handful of offcuts.
             </p>
             <a href="/" className="btn btn-primary mt-10">
               Get Started with Logger
@@ -550,7 +620,7 @@ export default function LandingPage() {
               className="mt-8 text-xl body-copy"
               style={{ fontFamily: 'var(--tv-font-sans)' }}
             >
-              Make every piece count.
+              No need to catalogue your entire workshop before you get started.
             </p>
           </div>
         </section>
