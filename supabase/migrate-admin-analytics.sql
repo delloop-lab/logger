@@ -1,4 +1,4 @@
--- Admin analytics: profiles enrichment + page hits (safe to re-run).
+-- Admin analytics: profiles enrichment + page hits + rich visitor telemetry (safe to re-run).
 -- Admin access: JWT email lou@schillaci.me, or profiles.is_admin = true.
 
 alter table public.profiles
@@ -40,21 +40,54 @@ create table if not exists public.page_hits (
   tab text,
   user_id uuid references auth.users (id) on delete set null,
   session_id text,
+  visitor_id text,
   referrer text,
   user_agent text,
+  country text,
+  region text,
+  city text,
+  timezone text,
+  language text,
+  screen text,
+  device_type text,
+  browser text,
+  os text,
+  utm_source text,
+  utm_medium text,
+  utm_campaign text,
+  ip text,
   created_at timestamptz not null default now()
 );
+
+-- Ensure visitor detail columns exist on older page_hits tables
+alter table public.page_hits add column if not exists visitor_id text;
+alter table public.page_hits add column if not exists country text;
+alter table public.page_hits add column if not exists region text;
+alter table public.page_hits add column if not exists city text;
+alter table public.page_hits add column if not exists timezone text;
+alter table public.page_hits add column if not exists language text;
+alter table public.page_hits add column if not exists screen text;
+alter table public.page_hits add column if not exists device_type text;
+alter table public.page_hits add column if not exists browser text;
+alter table public.page_hits add column if not exists os text;
+alter table public.page_hits add column if not exists utm_source text;
+alter table public.page_hits add column if not exists utm_medium text;
+alter table public.page_hits add column if not exists utm_campaign text;
+alter table public.page_hits add column if not exists ip text;
 
 create index if not exists page_hits_created_idx on public.page_hits (created_at desc);
 create index if not exists page_hits_tab_idx on public.page_hits (tab, created_at desc);
 create index if not exists page_hits_user_idx on public.page_hits (user_id, created_at desc);
+create index if not exists page_hits_visitor_idx on public.page_hits (visitor_id, created_at desc);
 
 alter table public.page_hits enable row level security;
 
+-- Allow both anonymous visitors and signed-in users to log hits
 drop policy if exists "page_hits_insert_own" on public.page_hits;
-create policy "page_hits_insert_own"
+drop policy if exists "page_hits_insert_any" on public.page_hits;
+create policy "page_hits_insert_any"
   on public.page_hits for insert
-  to authenticated
+  to anon, authenticated
   with check (user_id is null or user_id = auth.uid());
 
 drop policy if exists "page_hits_select_admin" on public.page_hits;

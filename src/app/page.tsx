@@ -104,8 +104,8 @@ export default function Page() {
   }, [showAdmin, activeTab]);
 
   useEffect(() => {
-    if (!signedIn || !authChecked) return;
-    void recordPageHit(activeTab, '/');
+    if (!authChecked) return;
+    void recordPageHit(activeTab);
   }, [activeTab, signedIn, authChecked]);
 
   const handleSignOut = async () => {

@@ -75,8 +75,11 @@ export default function CloudSync() {
         return;
       }
 
+      const cloudHadNoProjects = (result.data.savedProjects?.length || 0) === 0;
       skipSaveRef.current = true;
       hydrateFromCloud(result.data);
+      const seededRecoveredProjects =
+        cloudHadNoProjects && (useAppStore.getState().savedProjects?.length || 0) > 0;
 
       // Protect against empty cloud state if this device has a non-empty backup vault
       const bestDeviceBackup = await getBestRecoveryBackup(userId);
@@ -141,7 +144,7 @@ export default function CloudSync() {
       setAuthChecked(true);
       setTimeout(() => {
         skipSaveRef.current = false;
-        if (recoveredFromDevice) {
+        if (recoveredFromDevice || seededRecoveredProjects) {
           useAppStore.getState().bumpCloudRevision();
         }
       }, 0);
