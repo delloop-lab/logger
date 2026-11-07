@@ -3,11 +3,11 @@ import type { PropsWithChildren } from 'react';
 import './landing.css';
 
 export const metadata: Metadata = {
-  title: 'TimberVault — Timber inventory, QR labels & cut planning',
+  title: 'Logger — Timber inventory, QR labels & cut planning',
   description:
     'Organise your timber inventory, track every board and offcut, plan cuts and reduce waste.',
   openGraph: {
-    title: 'TimberVault — Know what timber you have',
+    title: 'Logger — Know what timber you have',
     description:
       'Track every board and offcut, plan cuts, reduce waste. Less searching. More making.',
     type: 'website',

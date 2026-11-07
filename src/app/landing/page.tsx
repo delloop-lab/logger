@@ -37,7 +37,7 @@ const features = [
     tag: 'C',
     title: 'Make better use of every board.',
     name: 'Intelligent cut-list & nesting',
-    body: 'Plan how components can be cut from available stock — making smarter use of the material already in your workshop.',
+    body: 'Plan how components can be cut from available stock, making smarter use of the material already in your workshop.',
     list: [
       'Required component dimensions',
       'Available board sizes',
@@ -50,6 +50,20 @@ const features = [
   },
   {
     tag: 'D',
+    title: 'Know exactly where every cut goes.',
+    name: 'PLAN YOUR CUTS',
+    img: '/landing/cut-plan.png',
+    body: 'Turn your project dimensions and available timber into clear, practical cutting plans. See how each piece fits, understand where to cut and make better use of the timber you already have.',
+    list: [
+      'Clear cutting diagrams',
+      'Dimensions for every piece',
+      'Optimised cutting layouts',
+      'Less material waste',
+    ],
+    foot: 'Less guesswork at the saw. More timber for your next project.',
+  },
+  {
+    tag: 'E',
     title: 'Turn forgotten offcuts into your next project.',
     name: 'What Can I Build?',
     img: '/landing/offcuts.jpg',
@@ -64,7 +78,7 @@ const features = [
     foot: 'Your next project might already be sitting in your workshop.',
   },
   {
-    tag: 'E',
+    tag: 'F',
     title: 'Let your camera help identify your timber.',
     name: 'Camera-assisted recognition',
     body: 'Photograph a board or a collection and get image-assisted suggestions. You review, correct and decide what gets saved.',
@@ -75,23 +89,19 @@ const features = [
       'Potential classifications',
       'Suggested dimensions where reliably detectable',
     ],
-    foot: 'TimberVault never pretends an uncertain identification is a fact.',
+    foot: 'Logger never pretends an uncertain identification is a fact.',
   },
   {
-    tag: 'F',
+    tag: 'G',
     title: 'Know where everything lives.',
     name: 'Workshop storage',
-    body: 'Organise inventory by storage location — rack, shelf, workbench or storage area — and keep it connected to its physical place.',
+    body: 'Organise inventory by storage location, rack, shelf, workbench or storage area, and keep it connected to its physical place.',
     list: ['Racks', 'Shelves', 'Workbenches', 'Storage areas'],
     foot: 'Find what you need without searching the entire workshop.',
   },
 ];
 
 const audiences = [
-  [
-    'Professional woodworkers',
-    'Manage stock, track material usage, organise offcuts and improve workshop efficiency.',
-  ],
   [
     'Cabinetmakers & furniture makers',
     'Keep track of material dimensions, plan components and make better use of available timber.',
@@ -118,22 +128,22 @@ const compare = [
 const faqs = [
   [
     'Do I need to be a professional woodworker?',
-    'No. TimberVault is intended for anyone who works with timber, from professional makers to DIY enthusiasts.',
+    'No. Logger is intended for anyone who works with timber, from professional makers to DIY enthusiasts.',
   ],
   [
     'Can I record individual offcuts?',
-    'Yes. TimberVault is designed to manage individual pieces as well as batches of timber.',
+    'Yes. Logger is designed to manage individual pieces as well as batches of timber.',
   ],
   [
     'Can I print labels?',
-    'Yes. TimberVault supports QR-coded timber labels, including printing through compatible thermal printers such as the MXW-01.',
+    'Yes. Logger supports QR-coded timber labels, including printing through compatible thermal printers such as the MXW-01.',
   ],
   [
     'Can I scan a timber label?',
     'Yes. The QR identification workflow allows you to scan a label and retrieve the corresponding inventory record.',
   ],
   [
-    'Can TimberVault help me plan cuts?',
+    'Can Logger help me plan cuts?',
     'Yes. Its cutting and nesting functionality helps plan component layouts and make more intelligent use of available stock.',
   ],
   [
@@ -142,7 +152,7 @@ const faqs = [
   ],
   [
     'Do I need complicated inventory software?',
-    'No. TimberVault provides practical workshop tools without the overhead of a large business management system.',
+    'No. Logger provides practical workshop tools without the overhead of a large business management system.',
   ],
 ];
 
@@ -173,9 +183,14 @@ export default function LandingPage() {
             }}
           />
           <nav className="relative section-pad flex items-center justify-between py-6">
-            <span style={{ fontFamily: 'var(--tv-font-display)', fontSize: '1.5rem' }}>
-              TimberVault
-            </span>
+            <a href="/landing" aria-label="Logger home">
+              <img
+                src="/brand/logger-logo.png"
+                alt="Logger"
+                className="block h-10 w-auto md:h-12"
+                draggable={false}
+              />
+            </a>
             <a href="/" className="btn btn-primary">
               Get Started
             </a>
@@ -188,9 +203,13 @@ export default function LandingPage() {
             >
               Know what timber you have. Know what you can make.
             </h1>
-            <p className="mt-6 max-w-xl text-lg" style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)' }}>
-              TimberVault helps woodworkers organise their timber inventory, track every board and
-              offcut, plan cuts, reduce waste and make better use of the wood they already own.
+            <p
+              className="mt-6 max-w-xl text-lg body-copy"
+              style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)' }}
+            >
+              Logger is totally free. It helps woodworkers organise their timber inventory, track
+              every board and offcut, plan cuts, reduce waste and make better use of the wood they
+              already own.
             </p>
             <div
               className="mt-6 flex flex-wrap gap-2 text-xs font-bold uppercase tracking-widest"
@@ -212,14 +231,20 @@ export default function LandingPage() {
               <a href="/" className="btn btn-primary">
                 Get Started
               </a>
-              <a href="#features" className="btn btn-ghost">
-                Explore TimberVault
+              <a href="#problem" className="btn btn-ghost">
+                Explore Logger
+              </a>
+              <a href="/" className="btn btn-ghost">
+                Demo
+              </a>
+              <a href="/?signup=1" className="btn btn-ghost">
+                Create Account
               </a>
             </div>
             <p
-              className="mt-10 text-xl italic"
+              className="mt-10 text-xl body-copy"
               style={{
-                fontFamily: 'var(--tv-font-display)',
+                fontFamily: 'var(--tv-font-sans)',
                 color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)',
               }}
             >
@@ -229,14 +254,14 @@ export default function LandingPage() {
         </section>
 
         {/* Problem */}
-        <section className="section-pad grid gap-12 py-24 md:grid-cols-[1fr_1.2fr]">
+        <section id="problem" className="section-pad grid gap-12 py-24 md:grid-cols-[1fr_1.2fr]">
           <div>
             <p className="eyebrow">The problem</p>
             <h2 className="mt-4" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
               How much timber do you actually have?
             </h2>
           </div>
-          <div className="space-y-5 text-lg" style={{ color: 'var(--tv-muted-foreground)' }}>
+          <div className="space-y-5 text-lg body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
             <p>If you&apos;re anything like most woodworkers, you probably have more timber than you think.</p>
             <p>
               Boards stacked against walls. Offcuts tucked under benches. Useful pieces hiding behind
@@ -244,15 +269,15 @@ export default function LandingPage() {
             </p>
             <p>
               You know there&apos;s a piece somewhere that would be perfect for your next project. You
-              just can&apos;t remember where you put it — and when you find it, it might be too short,
+              just can&apos;t remember where you put it, and when you find it, it might be too short,
               too narrow or unsuitable.
             </p>
-            <p className="text-2xl" style={{ fontFamily: 'var(--tv-font-display)', color: 'var(--tv-foreground)' }}>
+            <p className="text-2xl" style={{ fontFamily: 'var(--tv-font-sans)', color: 'var(--tv-foreground)', lineHeight: 1.45 }}>
               The problem isn&apos;t that you need more timber. It&apos;s that you don&apos;t have a
               clear picture of what you&apos;ve already got.
             </p>
             <p className="font-bold" style={{ color: 'var(--tv-primary)' }}>
-              TimberVault changes that.
+              Logger changes that.
             </p>
           </div>
         </section>
@@ -264,7 +289,7 @@ export default function LandingPage() {
             <h2 className="mt-4" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
               Your workshop deserves a better memory.
             </h2>
-            <p className="mt-6 text-lg" style={{ color: 'var(--tv-muted-foreground)' }}>
+            <p className="mt-6 text-lg body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
               A central place to manage your timber inventory, from full-length boards to the
               smallest useful offcuts. Record what you have, where it&apos;s stored, what it&apos;s
               made from and what dimensions are available.
@@ -295,7 +320,7 @@ export default function LandingPage() {
         <section id="features" className="section-pad py-24">
           <p className="eyebrow">Features</p>
           <h2 className="mt-4 max-w-2xl" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
-            What TimberVault actually does.
+            What Logger actually does.
           </h2>
           <div className="mt-16 space-y-20">
             {features.map((f, i) => (
@@ -310,10 +335,10 @@ export default function LandingPage() {
                   <h3 className="mt-3" style={{ fontSize: 'clamp(1.75rem, 3vw, 2.25rem)' }}>
                     {f.title}
                   </h3>
-                  <p className="mt-4" style={{ color: 'var(--tv-muted-foreground)' }}>
+                  <p className="mt-4 body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
                     {f.body}
                   </p>
-                  <p className="mt-6 text-lg italic" style={{ fontFamily: 'var(--tv-font-display)' }}>
+                  <p className="mt-6 text-lg body-copy" style={{ fontFamily: 'var(--tv-font-sans)' }}>
                     {f.foot}
                   </p>
                 </div>
@@ -401,17 +426,22 @@ export default function LandingPage() {
         <section className="section-pad py-24">
           <p className="eyebrow">Who it&apos;s for</p>
           <h2 className="mt-4" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
-            Who is TimberVault for?
+            Who is Logger for?
           </h2>
-          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {audiences.map(([t, d]) => (
               <div
                 key={t}
                 className="rounded-lg border p-6"
                 style={{ background: 'var(--tv-card)', borderColor: 'var(--tv-border)' }}
               >
-                <h3 className="text-xl">{t}</h3>
-                <p className="mt-3 text-sm" style={{ color: 'var(--tv-muted-foreground)' }}>
+                <h3 className="text-xl" style={{ lineHeight: 1.35 }}>
+                  {t}
+                </h3>
+                <p
+                  className="mt-3 text-sm body-copy"
+                  style={{ color: 'var(--tv-muted-foreground)' }}
+                >
                   {d}
                 </p>
               </div>
@@ -423,13 +453,13 @@ export default function LandingPage() {
         <section style={{ background: 'var(--tv-secondary)' }}>
           <div className="section-pad grid gap-12 py-24 md:grid-cols-2">
             <div>
-              <p className="eyebrow">Why TimberVault?</p>
+              <p className="eyebrow">Why Logger?</p>
               <h2 className="mt-4" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
                 Built around the way woodworkers actually work.
               </h2>
-              <p className="mt-6" style={{ color: 'var(--tv-muted-foreground)' }}>
-                Most inventory software is designed around products, quantities and sales. TimberVault
-                is designed around timber. A board isn&apos;t just another stock item — its species,
+              <p className="mt-6 body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
+                Most inventory software is designed around products, quantities and sales. Logger
+                is designed around timber. A board isn&apos;t just another stock item, its species,
                 thickness, dimensions, condition, location and remaining usable material all matter.
               </p>
             </div>
@@ -443,7 +473,7 @@ export default function LandingPage() {
               >
                 <div className="px-5 py-3">Typical inventory software</div>
                 <div className="px-5 py-3" style={{ color: 'var(--tv-primary)' }}>
-                  TimberVault
+                  Logger
                 </div>
               </div>
               {compare.map(([a, b]) => (
@@ -507,16 +537,19 @@ export default function LandingPage() {
               Your timber. Your workshop. Your way.
             </h2>
             <p
-              className="mt-6 text-lg"
+              className="mt-6 text-lg body-copy"
               style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)' }}
             >
-              TimberVault brings your timber inventory, offcuts, labels and cutting plans together in
+              Logger brings your timber inventory, offcuts, labels and cutting plans together in
               one place. Spend less time searching for wood. Spend more time making things.
             </p>
             <a href="/" className="btn btn-primary mt-10">
-              Get Started with TimberVault
+              Get Started with Logger
             </a>
-            <p className="mt-8 text-xl italic" style={{ fontFamily: 'var(--tv-font-display)' }}>
+            <p
+              className="mt-8 text-xl body-copy"
+              style={{ fontFamily: 'var(--tv-font-sans)' }}
+            >
               Make every piece count.
             </p>
           </div>
@@ -529,7 +562,7 @@ export default function LandingPage() {
             color: 'color-mix(in srgb, var(--tv-bark-foreground) 50%, transparent)',
           }}
         >
-          © {year} TimberVault
+          Logger (c) {year} Lou Schillaci
         </footer>
       </main>
     </div>

@@ -1,4 +1,4 @@
-/* Scoped TimberVault marketing landing — does not alter the workshop app theme. */
+/* Scoped Logger marketing landing — does not alter the workshop app theme. */
 
 /* Neutralize workshop shell chrome only while this page is mounted */
 body:has(.tv-landing) {
@@ -47,6 +47,13 @@ body:has(.tv-landing) {
 
 .tv-landing p {
   margin: 0;
+  line-height: 1.65;
+}
+
+.tv-landing .body-copy {
+  font-family: var(--tv-font-sans);
+  font-style: normal;
+  line-height: 1.7;
 }
 
 .tv-landing a {

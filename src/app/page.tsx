@@ -103,6 +103,22 @@ export default function Page() {
     if (!showAdmin && activeTab === 'admin') setActiveTab('dashboard');
   }, [showAdmin, activeTab]);
 
+  // Landing "Create Account" → /?signup=1
+  useEffect(() => {
+    if (!authChecked || signedIn) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('signup') !== '1') return;
+      setAuthMode('signup');
+      setAuthOpen(true);
+      params.delete('signup');
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`;
+      window.history.replaceState({}, '', next);
+    } catch {
+      /* ignore */
+    }
+  }, [authChecked, signedIn]);
+
   useEffect(() => {
     if (!authChecked) return;
     void recordPageHit(activeTab);
