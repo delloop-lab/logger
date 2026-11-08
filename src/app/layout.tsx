@@ -2,6 +2,7 @@ import './globals.css';
 import { PropsWithChildren } from 'react';
 import NotifyHost from '@/components/NotifyHost';
 import AppFooter from '@/components/AppFooter';
+import VisitorTracker from '@/components/VisitorTracker';
 
 export const metadata = {
   title: 'Logger — Timber inventory, QR labels & cut planning',
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: PropsWithChildren) {
         />
       </head>
       <body className="bg-[#121417] text-gray-100 min-h-screen pb-12 selection:bg-orange-600 selection:text-white">
+        <VisitorTracker />
         {children}
         <AppFooter />
         <NotifyHost />

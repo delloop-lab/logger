@@ -205,8 +205,8 @@ export async function loadAdminDashboard(): Promise<AdminDashboardData> {
       .order('created_at', { ascending: false })
       .limit(5000),
     supabase.from('boards').select('id, user_id, species, status'),
-    // Only select base columns guaranteed by initial schema so missing optional columns (like status) never fail the query
-    supabase.from('saved_projects').select('id, user_id, name'),
+    // Counts only — never pull other users' project names/parts into the client
+    supabase.from('saved_projects').select('user_id'),
   ]);
 
   if (profilesRes.error || hitsRes.error) {
@@ -248,29 +248,18 @@ export async function loadAdminDashboard(): Promise<AdminDashboardData> {
     }
   }
 
-  const projects: Array<{ id?: string; user_id: string; name: string }> = [...cloudProjects];
+  const projects: Array<{ user_id: string }> = cloudProjects.map((p) => ({
+    user_id: String(p.user_id || ''),
+  }));
+
+  // If the signed-in admin has more local projects than cloud yet, count local and push sync
   if (activeUid && latestStore.savedProjects.length > 0) {
-    const userCloudProjects = cloudProjects.filter(
-      (p) => String(p.user_id || '') === activeUid
-    );
-    const seenProjectIds = new Set(userCloudProjects.map((p) => String(p.id || '')));
-    const seenProjectNames = new Set(
-      userCloudProjects.map((p) => String(p.name || '').trim().toLowerCase())
-    );
-    let missingInCloud = false;
-    for (const lp of latestStore.savedProjects) {
-      const idKey = String(lp.id || '');
-      const nameKey = String(lp.name || '').trim().toLowerCase();
-      if (!seenProjectIds.has(idKey) && !seenProjectNames.has(nameKey)) {
-        projects.push({
-          id: lp.id,
-          user_id: activeUid,
-          name: lp.name,
-        });
-        missingInCloud = true;
+    const cloudCountForUser = projects.filter((p) => p.user_id === activeUid).length;
+    const localCount = latestStore.savedProjects.length;
+    if (localCount > cloudCountForUser) {
+      for (let i = 0; i < localCount - cloudCountForUser; i++) {
+        projects.push({ user_id: activeUid });
       }
-    }
-    if (missingInCloud) {
       void saveProjects(activeUid, latestStore.savedProjects);
     }
   }

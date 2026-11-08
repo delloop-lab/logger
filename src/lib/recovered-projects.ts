@@ -1,9 +1,17 @@
 import type { SavedProject } from '@/lib/store';
 
+/** Fixed ids used only for Lou's emergency workshop restore (never auto-seed for other users). */
+export const RECOVERED_PROJECT_ID_PREFIX = 'recover-';
+
+export function isRecoveredSeedProjectId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(RECOVERED_PROJECT_ID_PREFIX);
+}
+
 /**
  * Best-effort rebuild of Lou's workshop projects after a cloud wipe.
  * Names / piece counts / min dims from What Can I Build cards;
  * Drinks Tray finished sizes from shop sheets in the same session.
+ * Call only from the explicit restore action (admin), never on every empty login.
  */
 export function buildRecoveredWorkshopProjects(): SavedProject[] {
   const today = new Date().toLocaleDateString('en-GB', {

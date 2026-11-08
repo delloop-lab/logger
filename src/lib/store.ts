@@ -132,6 +132,8 @@ export interface ProjectTemplate {
   minWidth: number;
   minThickness: number;
   difficulty: ProjectDifficulty;
+  /** Public path for starter card image */
+  imageSrc?: string;
 }
 
 export interface ConfirmationPayload {
@@ -344,6 +346,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     minWidth: 50,
     minThickness: 30,
     difficulty: 'Intermediate',
+    imageSrc: '/templates/end-grain-cutting-board.png',
   },
   {
     id: 'tpl-coasters',
@@ -354,6 +357,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     minWidth: 100,
     minThickness: 12,
     difficulty: 'Beginner',
+    imageSrc: '/templates/coaster-set.png',
   },
   {
     id: 'tpl-mallet',
@@ -366,6 +370,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     // Laminated head — individual boards can be typical pallet/offcut thickness
     minThickness: 18,
     difficulty: 'Beginner',
+    imageSrc: '/templates/shop-mallet.png',
   },
 ];
 
@@ -449,12 +454,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   setAuthChecked: (checked) => set({ authChecked: checked }),
 
   hydrateFromCloud: (data) => {
-    // Only seed recovered projects if the cloud library is completely empty (0 projects).
-    // Never auto-resurrect a project the user intentionally deleted.
-    const cloudProjects = data.savedProjects || [];
-    const recovered =
-      cloudProjects.length === 0 ? buildRecoveredWorkshopProjects() : [];
-    const savedProjects = cloudProjects.length > 0 ? cloudProjects : recovered;
+    // Empty cloud = empty library for this user. Never auto-seed another user's workshop.
+    const savedProjects = data.savedProjects || [];
     const activeMatch = savedProjects.find(
       (p) => projectNameKey(p.name) === projectNameKey(data.activeProjectName || '')
     );
@@ -473,7 +474,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       cloudReady: true,
       demoPreview: false,
       cutHistory: [],
-      cloudRevision: recovered.length > 0 ? 1 : 0,
+      cloudRevision: 0,
     });
   },
 

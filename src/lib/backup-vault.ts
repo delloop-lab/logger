@@ -66,7 +66,8 @@ function getBackupDb(): LoggerBackupDatabase | null {
 const LS_FALLBACK_PREFIX = 'logger_device_backup_v1:';
 const LS_AUTO_DOWNLOAD_KEY = 'logger_auto_download_daily_backup_v1';
 const LS_LAST_FILE_DOWNLOAD_DATE_PREFIX = 'logger_last_file_backup_date_v1:';
-const MAX_DAILY_SNAPSHOTS = 30;
+/** Keep only this many daily:* snapshots (latest + highwater are never pruned). */
+export const MAX_DAILY_SNAPSHOTS = 7;
 
 export function todayDateString(now = new Date()): string {
   const year = now.getFullYear();
@@ -213,15 +214,7 @@ export async function recordDeviceBackup(
       saveLocalStorageMirror(userId, highRecord);
     }
 
-    // Prune daily snapshots older than MAX_DAILY_SNAPSHOTS (never prune latest or highwater)
-    const allForUser = await db.backups.where('userId').equals(userId).toArray();
-    const dailies = allForUser
-      .filter((r) => r.slot.startsWith('daily:'))
-      .sort((a, b) => b.backupDate.localeCompare(a.backupDate));
-    if (dailies.length > MAX_DAILY_SNAPSHOTS) {
-      const staleIds = dailies.slice(MAX_DAILY_SNAPSHOTS).map((r) => r.id);
-      await db.backups.bulkDelete(staleIds);
-    }
+    await pruneStaleDailyBackups(userId);
   } catch {
     saveLocalStorageMirror(userId, dailyRecord);
   }
@@ -229,9 +222,48 @@ export async function recordDeviceBackup(
   return { savedDaily, backupDate };
 }
 
+/** Drop daily snapshots beyond MAX_DAILY_SNAPSHOTS (never touches latest / highwater). */
+async function pruneStaleDailyBackups(userId: string): Promise<void> {
+  if (!userId) return;
+
+  const collectDailies = (rows: StoredBackupRecord[]) =>
+    rows
+      .filter((r) => r.slot.startsWith('daily:'))
+      .sort((a, b) => b.backupDate.localeCompare(a.backupDate));
+
+  const db = getBackupDb();
+  if (db) {
+    try {
+      const allForUser = await db.backups.where('userId').equals(userId).toArray();
+      const dailies = collectDailies(allForUser);
+      if (dailies.length > MAX_DAILY_SNAPSHOTS) {
+        const staleIds = dailies.slice(MAX_DAILY_SNAPSHOTS).map((r) => r.id);
+        await db.backups.bulkDelete(staleIds);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (typeof window === 'undefined') return;
+  try {
+    const mirrors = readLocalStorageMirrors(userId);
+    const dailies = collectDailies(mirrors);
+    if (dailies.length > MAX_DAILY_SNAPSHOTS) {
+      for (const stale of dailies.slice(MAX_DAILY_SNAPSHOTS)) {
+        window.localStorage.removeItem(`${LS_FALLBACK_PREFIX}${userId}:${stale.slot}`);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 /** List all device backups for a user (newest first). */
 export async function listDeviceBackups(userId: string): Promise<StoredBackupRecord[]> {
   if (!userId) return [];
+  await pruneStaleDailyBackups(userId);
+
   const byId = new Map<string, StoredBackupRecord>();
 
   for (const item of readLocalStorageMirrors(userId)) {

@@ -22,7 +22,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     b.classification === 'finished_piece' || /-PART$/i.test(b.tagId || '');
   /** Pullable stock + offcuts (finished parts are staged, not available). */
   const availableBoards = boards.filter((b) => b.status === 'active' && !isFinished(b));
-  const consumed = boards.filter((b) => b.status === 'consumed');
   const offcuts = availableBoards.filter((b) => b.classification === 'reusable_offcut');
   const stagedFinished = boards.filter((b) => isFinished(b) && b.status !== 'consumed');
   const installedFinished = boards.filter((b) => isFinished(b) && b.status === 'consumed');
@@ -75,7 +74,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     {
       label: 'Staged, installed',
       value: `${pieceCount(stagedFinished)} / ${pieceCount(installedFinished)}`,
-      hint: `${pieceCount(consumed)} consumed lots, finished leave stock when installed`,
+      hint: 'Finished pieces leave stock when marked installed',
       tone: 'text-orange-400',
     },
   ];
@@ -125,7 +124,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 onClick={() => onNavigate('quick-log')}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold cursor-pointer"
               >
-                <PlusCircle className="w-4 h-4" /> Log your first board
+                <PlusCircle className="w-4 h-4" /> Log your first piece of timber
               </button>
             </div>
           ) : (

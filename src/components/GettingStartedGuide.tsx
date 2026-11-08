@@ -177,7 +177,7 @@ export default function GettingStartedGuide() {
       </div>
 
       <p className="text-[11px] text-gray-500 border-t border-gray-800 pt-4">
-        Copyright (c) 2026 Lou Schillaci · {version}
+        Copyright (c) {new Date().getFullYear()} The Novita Group Pty Ltd · {version}
       </p>
     </div>
   );

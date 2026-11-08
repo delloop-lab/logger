@@ -13,6 +13,8 @@ import { speciesMatches } from '@/lib/cutting-engine';
 import { Sparkles, ArrowRight, Trophy, Pencil, Check, X, FolderOpen, Trash2 } from 'lucide-react';
 import { notify, toast } from '@/lib/notify';
 import { formatDim, formatDimsLWT, type UnitSystem } from '@/lib/units';
+import { isAdminEmail } from '@/lib/admin';
+import { getSupabase } from '@/lib/supabase/client';
 
 interface ProjectMatcherProps {
   onOpenCutList: () => void;
@@ -151,6 +153,15 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
   const [editDifficulty, setEditDifficulty] = useState<ProjectDifficulty>('Beginner');
+  const [canRestoreWorkshopSeeds, setCanRestoreWorkshopSeeds] = useState(false);
+
+  React.useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    void supabase.auth.getSession().then(({ data }) => {
+      setCanRestoreWorkshopSeeds(isAdminEmail(data.session?.user?.email));
+    });
+  }, []);
 
   // Ensure the open workbench project is listed (e.g. Simple Test Project after cuts)
   React.useEffect(() => {
@@ -207,30 +218,13 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
     };
   });
 
-  const startFromTemplate = (templateId: string) => {
-    const item = assessedTemplates.find((a) => a.template.id === templateId);
-    if (!item || item.matches.length === 0) {
-      toast.error('Not enough matching stock for this template yet.');
-      return;
-    }
-
-    const { template, matches } = item;
-    clearActiveCuttingPlan();
-    setActiveProjectName(template.name);
-    setActiveKerfMm(defaultKerfMm);
-    setActiveParts([
-      {
-        id: `${template.id}-part`,
-        name: template.name,
-        species: matches[0].species,
-        length: template.minLength,
-        width: template.minWidth,
-        thickness: template.minThickness,
-        quantity: Math.min(matches.length, 4),
-      },
-    ]);
-    toast.success(`Started project from template: ${template.name}`);
-    onOpenCutList();
+  const startFromTemplate = async (_templateId: string) => {
+    await notify.choice({
+      title: 'Shared Starter Templates Coming Soon!',
+      message:
+        "We're currently building out our community and starter template library so you can instantly import, customize, and cut pre-tested woodworking designs.\n\nIn the meantime, you can create and save custom project cut lists manually from your own workshop inventory.",
+      actions: [{ id: 'got-it', label: 'Got It', primary: true }],
+    });
   };
 
   const openProject = (project: SavedProject) => {
@@ -313,7 +307,7 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Trophy className="w-4 h-4 text-orange-500" /> Your projects ({assessedProjects.length})
           </h3>
-          {assessedProjects.length < 5 && (
+          {canRestoreWorkshopSeeds && assessedProjects.length < 5 && (
             <button
               type="button"
               onClick={() => {
@@ -339,22 +333,24 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
               No saved projects yet. Create one under Projects &amp; Cuts (name it, add parts, Save
               project), then it shows up here with skill level and description.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                const result = restoreRecoveredProjects();
-                if (result.added === 0) {
-                  toast.success('Workshop projects are already in the library.');
-                  return;
-                }
-                toast.success(
-                  `Restored ${result.added} project${result.added === 1 ? '' : 's'} (Drinks Tray, Cutting Board, Simple Test, Tech-Drawing Board).`
-                );
-              }}
-              className="mx-auto px-4 py-2.5 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white cursor-pointer"
-            >
-              Restore workshop projects
-            </button>
+            {canRestoreWorkshopSeeds && (
+              <button
+                type="button"
+                onClick={() => {
+                  const result = restoreRecoveredProjects();
+                  if (result.added === 0) {
+                    toast.success('Workshop projects are already in the library.');
+                    return;
+                  }
+                  toast.success(
+                    `Restored ${result.added} project${result.added === 1 ? '' : 's'} (Drinks Tray, Cutting Board, Simple Test, Tech-Drawing Board).`
+                  );
+                }}
+                className="mx-auto px-4 py-2.5 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white cursor-pointer"
+              >
+                Restore workshop projects
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -523,17 +519,40 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
           {assessedTemplates.map(({ template, matches, status, gapReason }) => (
             <div
               key={template.id}
-              className="bg-[#1e2228] border border-gray-800 p-5 rounded-2xl flex flex-col justify-between gap-4 shadow-xl"
+              className="bg-[#1e2228] border border-gray-800 rounded-2xl flex flex-col justify-between gap-4 shadow-xl overflow-hidden"
             >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-mono bg-gray-800 text-gray-300 px-2 py-1 rounded-lg">
-                    {template.difficulty}
-                  </span>
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${fitTone(status)}`}>
-                    {status}
-                  </span>
+              {template.imageSrc && (
+                <div className="relative aspect-[4/3] bg-[#121417] overflow-hidden">
+                  <img
+                    src={template.imageSrc}
+                    alt={template.name}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-3">
+                    <span className="text-[10px] font-mono bg-black/55 text-gray-100 px-2 py-1 rounded-lg backdrop-blur-sm">
+                      {template.difficulty}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border backdrop-blur-sm ${fitTone(status)}`}
+                    >
+                      {status}
+                    </span>
+                  </div>
                 </div>
+              )}
+              <div className="space-y-3 px-5 pt-1">
+                {!template.imageSrc && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-mono bg-gray-800 text-gray-300 px-2 py-1 rounded-lg">
+                      {template.difficulty}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${fitTone(status)}`}
+                    >
+                      {status}
+                    </span>
+                  </div>
+                )}
                 <h3 className="text-base font-bold text-white">{template.name}</h3>
                 <p className="text-xs text-gray-400 leading-relaxed">{template.description}</p>
                 <p className="text-[11px] text-gray-500 font-mono">
@@ -553,18 +572,15 @@ export default function ProjectMatcher({ onOpenCutList }: ProjectMatcherProps) {
                 )}
               </div>
 
-              <button
-                type="button"
-                disabled={matches.length === 0}
-                onClick={() => startFromTemplate(template.id)}
-                className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                  matches.length === 0
-                    ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                    : 'bg-orange-600 hover:bg-orange-500 text-white cursor-pointer'
-                }`}
-              >
-                Start cut list <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="px-5 pb-5">
+                <button
+                  type="button"
+                  onClick={() => void startFromTemplate(template.id)}
+                  className="w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all bg-orange-600 hover:bg-orange-500 text-white cursor-pointer"
+                >
+                  Start cut list <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

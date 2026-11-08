@@ -16,6 +16,11 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 }
 
 export const ADMIN_TAB_LABELS: Record<string, string> = {
+  landing: 'Landing',
+  app: 'Workshop app',
+  privacy: 'Privacy',
+  terms: 'Terms',
+  cookies: 'Cookies',
   dashboard: 'Dashboard',
   'quick-log': 'Quick Log',
   inventory: 'Inventory',

@@ -11,6 +11,7 @@ import AdminPanel from '@/components/AdminPanel';
 import ScannerTab from '@/app/scanner';
 import CloudSync from '@/components/CloudSync';
 import AuthModal from '@/components/AuthModal';
+import PasswordResetModal from '@/components/PasswordResetModal';
 import AppModal from '@/components/AppModal';
 import GettingStartedGuide from '@/components/GettingStartedGuide';
 import HelpGuide from '@/components/HelpGuide';
@@ -175,6 +176,7 @@ export default function Page() {
   return (
     <>
       <CloudSync />
+      <PasswordResetModal />
       <div
         className="min-h-screen bg-[#121417] text-gray-100 p-4 md:p-8 font-sans"
         onClickCapture={guardLoggedOutAction}
@@ -190,13 +192,23 @@ export default function Page() {
                 {!authChecked ? (
                   <div className="h-9 w-24 rounded-xl bg-gray-800/60 animate-pulse shrink-0" />
                 ) : signedIn ? (
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-xs font-bold rounded-xl cursor-pointer text-gray-300 shrink-0"
-                  >
-                    <LogOut className="w-3.5 h-3.5" /> Sign out
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0 min-w-0">
+                    {userEmail ? (
+                      <span
+                        className="text-[11px] font-mono text-gray-400 truncate max-w-[10rem] sm:max-w-[16rem] md:max-w-none"
+                        title={userEmail}
+                      >
+                        {userEmail}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      className="inline-flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-xs font-bold rounded-xl cursor-pointer text-gray-300 shrink-0"
+                    >
+                      <LogOut className="w-3.5 h-3.5" /> Sign out
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex flex-nowrap items-center justify-end gap-1.5 shrink-0 ml-auto max-w-[min(100%,42rem)] overflow-x-auto">
                     <button

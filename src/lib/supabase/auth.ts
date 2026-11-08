@@ -102,3 +102,47 @@ export async function signOut(): Promise<{ ok: true } | { ok: false; message: st
   if (error) return { ok: false, message: error.message };
   return { ok: true };
 }
+
+export async function requestPasswordReset(
+  email: string
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Supabase is not configured yet.' };
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return { ok: false, message: 'Enter the email address for your account.' };
+  }
+
+  const redirectTo =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/app?reset=1`
+      : undefined;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+    ...(redirectTo ? { redirectTo } : {}),
+  });
+
+  if (error) return { ok: false, message: error.message };
+  return {
+    ok: true,
+    message: 'If that email is registered, we sent a password reset link. Check your inbox (and spam).',
+  };
+}
+
+export async function updatePassword(
+  newPassword: string
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Supabase is not configured yet.' };
+  }
+  if (newPassword.length < 6) {
+    return { ok: false, message: 'Password must be at least 6 characters.' };
+  }
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, message: 'Password updated. You are signed in.' };
+}

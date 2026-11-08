@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { toast } from '@/lib/notify';
+import { notify, toast } from '@/lib/notify';
 import { useAppStore } from '@/lib/store';
 import { getSupabase } from '@/lib/supabase/client';
 import {
@@ -20,6 +20,8 @@ import {
   todayDateString,
 } from '@/lib/backup-vault';
 import { syncUserProfile } from '@/lib/supabase/profile';
+import { isAdminEmail } from '@/lib/admin';
+import { isRecoveredSeedProjectId } from '@/lib/recovered-projects';
 
 /**
  * Auth + Supabase workspace bridge.
@@ -53,7 +55,10 @@ export default function CloudSync() {
 
     let cancelled = false;
 
-    const applySession = async (userId: string | null) => {
+    const applySession = async (
+      userId: string | null,
+      email: string | null | undefined = null
+    ) => {
       if (cancelled) return;
       if (!userId) {
         // Wipe any real account data, then show sample preview only
@@ -62,6 +67,8 @@ export default function CloudSync() {
         return;
       }
 
+      // Drop previous account / demo data before loading this user's cloud
+      clearWorkshopMemory();
       setCloudUserId(userId);
       setCloudReady(false);
       void syncUserProfile();
@@ -75,33 +82,59 @@ export default function CloudSync() {
         return;
       }
 
-      const cloudHadNoProjects = (result.data.savedProjects?.length || 0) === 0;
       skipSaveRef.current = true;
       hydrateFromCloud(result.data);
-      const seededRecoveredProjects =
-        cloudHadNoProjects && (useAppStore.getState().savedProjects?.length || 0) > 0;
+
+      const allowSeedRestore = isAdminEmail(email);
+      let strippedLeakedSeeds = false;
+      if (!allowSeedRestore) {
+        const leaked = (useAppStore.getState().savedProjects || []).filter((p) =>
+          isRecoveredSeedProjectId(p.id)
+        );
+        if (leaked.length > 0) {
+          for (const p of leaked) {
+            useAppStore.getState().deleteProject(p.id);
+          }
+          strippedLeakedSeeds = true;
+        }
+      }
 
       // Protect against empty cloud state if this device has a non-empty backup vault
       const bestDeviceBackup = await getBestRecoveryBackup(userId);
       let recoveredFromDevice = false;
       if (bestDeviceBackup) {
         const cloudBoardsEmpty = (result.data.boards?.length || 0) === 0;
-        const cloudProjectsEmpty = (result.data.savedProjects?.length || 0) === 0;
-        const backupHasBoards = (bestDeviceBackup.payload.boards?.length || 0) > 0;
-        const backupHasProjects = (bestDeviceBackup.payload.savedProjects?.length || 0) > 0;
+        const cloudProjectsEmpty =
+          (result.data.savedProjects || []).filter((p) =>
+            allowSeedRestore ? true : !isRecoveredSeedProjectId(p.id)
+          ).length === 0;
+        const backupBoards = bestDeviceBackup.payload.boards || [];
+        const backupProjects = (bestDeviceBackup.payload.savedProjects || []).filter((p) =>
+          allowSeedRestore ? true : !isRecoveredSeedProjectId(p.id)
+        );
+        const backupHasBoards = backupBoards.length > 0;
+        const backupHasProjects = backupProjects.length > 0;
 
         if ((cloudBoardsEmpty && backupHasBoards) || (cloudProjectsEmpty && backupHasProjects)) {
-          const merged = useAppStore.getState().mergeBackupIntoWorkshop({
-            boards: cloudBoardsEmpty ? bestDeviceBackup.payload.boards : [],
-            savedProjects: cloudProjectsEmpty ? bestDeviceBackup.payload.savedProjects : [],
-            storageLocations: bestDeviceBackup.payload.storageLocations,
-            lumberTypes: bestDeviceBackup.payload.lumberTypes,
+          const ok = await notify.confirm({
+            title: 'Restore from device backup?',
+            message: `Your online workshop looks empty, but this device has a backup from ${bestDeviceBackup.backupDate} (${bestDeviceBackup.boardCount} boards, ${bestDeviceBackup.projectCount} projects).\n\nRestore missing boards and projects into your account? Existing items stay as they are.`,
+            confirmLabel: 'Restore backup',
+            cancelLabel: 'Skip',
           });
-          if (merged.addedBoards > 0 || merged.addedProjects > 0) {
-            recoveredFromDevice = true;
-            toast.success(
-              `Restored ${merged.addedBoards} board${merged.addedBoards === 1 ? '' : 's'} & ${merged.addedProjects} project${merged.addedProjects === 1 ? '' : 's'} from device backup (${bestDeviceBackup.backupDate}).`
-            );
+          if (ok) {
+            const merged = useAppStore.getState().mergeBackupIntoWorkshop({
+              boards: cloudBoardsEmpty ? backupBoards : [],
+              savedProjects: cloudProjectsEmpty ? backupProjects : [],
+              storageLocations: bestDeviceBackup.payload.storageLocations,
+              lumberTypes: bestDeviceBackup.payload.lumberTypes,
+            });
+            if (merged.addedBoards > 0 || merged.addedProjects > 0) {
+              recoveredFromDevice = true;
+              toast.success(
+                `Restored ${merged.addedBoards} board${merged.addedBoards === 1 ? '' : 's'} & ${merged.addedProjects} project${merged.addedProjects === 1 ? '' : 's'} from device backup (${bestDeviceBackup.backupDate}).`
+              );
+            }
           }
         }
       }
@@ -144,7 +177,7 @@ export default function CloudSync() {
       setAuthChecked(true);
       setTimeout(() => {
         skipSaveRef.current = false;
-        if (recoveredFromDevice || seededRecoveredProjects) {
+        if (recoveredFromDevice || strippedLeakedSeeds) {
           useAppStore.getState().bumpCloudRevision();
         }
       }, 0);
@@ -152,7 +185,10 @@ export default function CloudSync() {
 
     (async () => {
       const { data } = await supabase.auth.getSession();
-      await applySession(data.session?.user?.id ?? null);
+      await applySession(
+        data.session?.user?.id ?? null,
+        data.session?.user?.email ?? null
+      );
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -161,7 +197,7 @@ export default function CloudSync() {
         return;
       }
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION') {
-        await applySession(session?.user?.id ?? null);
+        await applySession(session?.user?.id ?? null, session?.user?.email ?? null);
       }
     });
 

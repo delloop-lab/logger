@@ -271,10 +271,10 @@ export default function HelpGuide({
             <p className="text-gray-400 mt-0.5">
               Use Contact in the footer:{' '}
               <a
-                href="mailto:lou@schillaci.me"
+                href="mailto:loggerhelp@novitagroup.com"
                 className="text-orange-400 hover:text-orange-300"
               >
-                lou@schillaci.me
+                loggerhelp@novitagroup.com
               </a>
               .
             </p>
@@ -283,7 +283,7 @@ export default function HelpGuide({
       </section>
 
       <p className="text-[11px] text-gray-500 border-t border-gray-800 pt-4">
-        Copyright (c) 2026 Lou Schillaci · {version}
+        Copyright (c) {new Date().getFullYear()} The Novita Group Pty Ltd · {version}
       </p>
     </div>
   );

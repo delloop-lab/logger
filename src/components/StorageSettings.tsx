@@ -477,7 +477,8 @@ export default function StorageSettings() {
               <ShieldCheck className="w-4 h-4 text-emerald-400" /> Workshop Backups
             </h3>
             <p className="text-[11px] text-gray-400">
-              Your boards and projects are automatically saved every day on this device and in your online account.
+              Your boards and projects are automatically saved every day on this device and in your online
+              account. We keep the last 7 days of daily backups.
             </p>
           </div>
 
@@ -533,6 +534,14 @@ export default function StorageSettings() {
                   toast.error(parsed.message);
                   return;
                 }
+                const boardCount = parsed.payload.boards?.length || 0;
+                const projectCount = parsed.payload.savedProjects?.length || 0;
+                const ok = await notify.confirm({
+                  title: 'Restore from backup file?',
+                  message: `This merges ${boardCount} board${boardCount === 1 ? '' : 's'} and ${projectCount} project${projectCount === 1 ? '' : 's'} from "${file.name}" into your current workshop.\n\nExisting boards and projects stay as they are. Only missing items are added, then synced to your account.`,
+                  confirmLabel: 'Restore from file',
+                });
+                if (!ok) return;
                 const merged = store.mergeBackupIntoWorkshop(parsed.payload);
                 await refreshBackupsList();
                 toast.success(
@@ -585,7 +594,13 @@ export default function StorageSettings() {
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
+                      const ok = await notify.confirm({
+                        title: 'Restore this backup?',
+                        message: `Restore "${formatShortBackupTitle(b)}" (${b.boardCount} boards, ${b.projectCount} projects) into your current workshop?\n\nExisting boards and projects stay as they are. Only missing items are added, then synced to your account.`,
+                        confirmLabel: 'Restore backup',
+                      });
+                      if (!ok) return;
                       const res = store.mergeBackupIntoWorkshop(b.payload);
                       if (res.addedBoards === 0 && res.addedProjects === 0) {
                         toast.success('Everything in this backup is already in your workshop.');

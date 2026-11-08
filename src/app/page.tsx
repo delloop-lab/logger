@@ -660,7 +660,16 @@ export default function LandingPage() {
             color: 'color-mix(in srgb, var(--tv-bark-foreground) 50%, transparent)',
           }}
         >
-          Logger (c) {year} Lou Schillaci
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <span>Logger (c) {year} The Novita Group Pty Ltd</span>
+            <a
+              href="mailto:loggerhelp@novitagroup.com"
+              className="font-bold hover:opacity-100"
+              style={{ color: 'var(--tv-primary)' }}
+            >
+              Contact
+            </a>
+          </div>
         </footer>
       </main>
     </div>

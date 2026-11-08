@@ -9,7 +9,6 @@ import {
   FolderKanban,
   RefreshCw,
   AlertTriangle,
-  RotateCcw,
   Trash2,
   Globe,
   Link2,
@@ -24,7 +23,6 @@ import AdminBarChart from '@/components/AdminBarChart';
 import { loadAdminDashboard, type AdminDashboardData } from '@/lib/supabase/admin-stats';
 import { formatAppVersion } from '@/lib/version';
 import { getSupabase } from '@/lib/supabase/client';
-import { useAppStore } from '@/lib/store';
 import { notify, toast } from '@/lib/notify';
 
 function fmtWhen(iso: string | null): string {
@@ -68,7 +66,6 @@ function StatCard({
 }
 
 export default function AdminPanel() {
-  const resetWorkshopData = useAppStore((s) => s.resetWorkshopData);
   const [data, setData] = useState<AdminDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -538,31 +535,6 @@ export default function AdminPanel() {
             </button>
           </div>
         ) : null}
-      </div>
-
-      <div className="bg-red-950/25 border border-red-900/50 px-5 py-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="text-xs text-gray-300">
-          <strong className="text-red-300 uppercase tracking-wide mr-2">Danger Zone — Start Fresh:</strong>
-          Clears inventory, offcuts, saved projects, and completed cuts.
-        </div>
-        <button
-          type="button"
-          onClick={async () => {
-            const ok = await notify.confirm({
-              title: 'Warning: wipe workshop data?',
-              message:
-                'This deletes all boards, finished pieces, offcuts, projects, and cut progress. This cannot be undone.',
-              confirmLabel: 'Wipe everything',
-              danger: true,
-            });
-            if (!ok) return;
-            resetWorkshopData();
-            toast.success('Workshop cleared, log stock and start a new project.');
-          }}
-          className="px-4 py-2 bg-red-950 hover:bg-red-900 border border-red-700/60 text-red-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-        >
-          <RotateCcw className="w-3.5 h-3.5" /> Wipe Inventory
-        </button>
       </div>
     </div>
   );

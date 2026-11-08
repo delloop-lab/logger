@@ -308,6 +308,8 @@ export async function saveProjects(
   const supabase = getSupabase();
   if (!supabase) return { ok: false, message: 'Supabase is not configured yet.' };
 
+  if (!userId) return { ok: false, message: 'Missing user id for project save.' };
+
   const unique = dedupeProjectsById(projects);
 
   // Never wipe the cloud library from an empty local snapshot (recoverable data loss)
@@ -318,6 +320,7 @@ export async function saveProjects(
     return { ok: true };
   }
 
+  // Always stamp the signed-in owner — projects stay personal to that user
   const baseRows = unique.map((p) => ({
     id: p.id,
     user_id: userId,
@@ -365,13 +368,19 @@ export async function saveProjects(
   const isConflictTargetMismatch = (msg: string) =>
     /no unique or exclusion constraint matching the ON CONFLICT/i.test(msg);
 
-  /** Live DBs may still be PK(id) or PK(user_id,id) — try both, then row merge. */
+  /**
+   * Prefer composite (user_id,id) so one user's project id can never overwrite another's.
+   * Fall back to merge-by-(user_id,id) only — never upsert onConflict: 'id' alone.
+   */
   const tryUpsert = async (rows: Record<string, unknown>[]) => {
-    for (const conflict of ['user_id,id', 'id'] as const) {
-      const res = await supabase.from('saved_projects').upsert(rows, { onConflict: conflict });
-      if (!res.error) return null;
-      if (!isConflictTargetMismatch(res.error.message)) return res.error;
+    for (const row of rows) {
+      if (String(row.user_id || '') !== userId) {
+        return { message: 'Refusing to save project under a different user id.' };
+      }
     }
+    const res = await supabase.from('saved_projects').upsert(rows, { onConflict: 'user_id,id' });
+    if (!res.error) return null;
+    if (!isConflictTargetMismatch(res.error.message)) return res.error;
     return { message: 'ON CONFLICT target mismatch', code: '42P10' } as {
       message: string;
       code?: string;
@@ -623,6 +632,18 @@ export async function saveCloudDailyBackup(
       },
       { onConflict: 'user_id,backup_date' }
     );
+
+    // Keep only the last 7 cloud daily rows for this user
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - 6);
+    const cutoffDate = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(
+      cutoff.getDate()
+    ).padStart(2, '0')}`;
+    await supabase
+      .from('workspace_backups')
+      .delete()
+      .eq('user_id', userId)
+      .lt('backup_date', cutoffDate);
   } catch {
     /* ignore if table does not exist yet */
   }

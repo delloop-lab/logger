@@ -196,25 +196,30 @@ create policy "boards_delete_own"
   on public.boards for delete
   using (auth.uid() = user_id);
 
--- Saved projects policies
+-- Saved projects policies (personal to each user; see also migrate-project-privacy.sql)
 drop policy if exists "projects_select_own" on public.saved_projects;
 create policy "projects_select_own"
   on public.saved_projects for select
+  to authenticated
   using (auth.uid() = user_id);
 
 drop policy if exists "projects_insert_own" on public.saved_projects;
 create policy "projects_insert_own"
   on public.saved_projects for insert
+  to authenticated
   with check (auth.uid() = user_id);
 
 drop policy if exists "projects_update_own" on public.saved_projects;
 create policy "projects_update_own"
   on public.saved_projects for update
-  using (auth.uid() = user_id);
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 drop policy if exists "projects_delete_own" on public.saved_projects;
 create policy "projects_delete_own"
   on public.saved_projects for delete
+  to authenticated
   using (auth.uid() = user_id);
 
 -- Auto-create profile + prefs + default locations on signup
