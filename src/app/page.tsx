@@ -199,7 +199,10 @@ export default function LandingPage() {
   const year = new Date().getFullYear();
 
   return (
-    <div className="tv-landing">
+    <div
+      className="tv-landing"
+      style={{ backgroundColor: '#f9f4ec', color: '#241710' }}
+    >
       <main>
         {/* Hero */}
         <section

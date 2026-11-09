@@ -1,13 +1,17 @@
 /* Scoped Logger marketing landing — does not alter the workshop app theme. */
 
 /* Neutralize workshop shell chrome only while this page is mounted */
+html:has(.tv-landing),
 body:has(.tv-landing) {
   background: #f9f4ec !important;
+  background-color: #f9f4ec !important;
   color: #241710 !important;
   padding-bottom: 0 !important;
+  color-scheme: light;
 }
 
-.tv-landing {
+.tv-landing,
+body > div.tv-landing:first-child {
   --tv-radius: 0.375rem;
   --tv-background: #f9f4ec;
   --tv-foreground: #241710;
@@ -23,8 +27,9 @@ body:has(.tv-landing) {
   --tv-font-display: "Fraunces", Georgia, serif;
   --tv-font-sans: "Manrope", system-ui, sans-serif;
 
-  background: var(--tv-background);
-  color: var(--tv-foreground);
+  background: var(--tv-background) !important;
+  background-color: var(--tv-background) !important;
+  color: var(--tv-foreground) !important;
   font-family: var(--tv-font-sans);
   min-height: 100vh;
   isolation: isolate;

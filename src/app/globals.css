@@ -30,7 +30,7 @@ button {
 }
 
 /* Avoid white flash while CSS chunks hydrate. */
-body > div:first-child {
+body > div:first-child:not(.tv-landing) {
   min-height: 100vh;
   background-color: #121417;
 }
