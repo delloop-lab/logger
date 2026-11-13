@@ -194,6 +194,11 @@ export type WorkspaceData = {
   activeCuttingPlan: SavedCuttingPlan | null;
 };
 
+/** Cloud load payload — suppliers may be absent (still device-local). */
+export type CloudHydrateInput = Omit<WorkspaceData, 'suppliers'> & {
+  suppliers?: string[];
+};
+
 export type CutHistoryEntry = {
   opKey: string;
   /** Boards whose status/qty were changed (lot or previous rem) */
@@ -238,7 +243,7 @@ interface AppState extends WorkspaceData {
   setCloudReady: (ready: boolean) => void;
   setCloudSaving: (saving: boolean) => void;
   setAuthChecked: (checked: boolean) => void;
-  hydrateFromCloud: (data: WorkspaceData) => void;
+  hydrateFromCloud: (data: CloudHydrateInput) => void;
   clearWorkshopMemory: () => void;
   /** Load sample workshop for signed-out UI (not real account data). */
   loadDemoPreview: () => void;
@@ -534,7 +539,7 @@ function planReferencesBoard(
   if (candidates.has(board.id) || candidates.has(boardTag) || candidates.has(boardRoot)) {
     return true;
   }
-  for (const t of candidates) {
+  for (const t of Array.from(candidates)) {
     if (
       t === boardTag ||
       t === boardRoot ||
@@ -718,7 +723,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const removed = state.boards.filter((b) => idSet.has(b.id));
       if (removed.length === 0) return state;
       const pending = new Set(state.pendingDeletedBoardIds);
-      for (const id of idSet) pending.add(id);
+      for (const id of Array.from(idSet)) pending.add(id);
       const invalidated = invalidatePlansForDeletedBoards(state, removed);
       return {
         boards: state.boards.filter((b) => !idSet.has(b.id)),
@@ -1144,7 +1149,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
                 : b
             );
       return {
-        ...invalidatePlanForPartsChange({ ...state, boards }),
+        ...invalidatePlanForPartsChange(state),
         boards,
       };
     }),
@@ -1156,7 +1161,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const match = (b: Board) =>
         want.has(b.tagId) ||
         want.has(b.id) ||
-        [...want].some(
+        Array.from(want).some(
           (t) =>
             t.startsWith(`${b.id}#`) ||
             (t.startsWith(`${b.tagId}-`) && !t.includes('-OP'))
@@ -1176,7 +1181,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const match = (b: Board) =>
         want.has(b.tagId) ||
         want.has(b.id) ||
-        [...want].some(
+        Array.from(want).some(
           (t) =>
             t.startsWith(`${b.id}#`) ||
             (t.startsWith(`${b.tagId}-`) && !t.includes('-OP'))

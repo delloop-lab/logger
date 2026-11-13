@@ -188,6 +188,7 @@ export function createDemoWorkspace(): WorkspaceData {
       'Maple',
       'Mahogany',
     ],
+    suppliers: ['Bunnings', 'Local timber yard'],
     savedProjects,
     activeProjectName: 'New Project',
     activeParts: [],
