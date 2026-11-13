@@ -10,7 +10,9 @@ type AppModalProps = {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
-  /** Wider dialog for forms with more fields; `app` matches main computer layout (max-w-6xl) */
+  /** Optional pill next to the brand logo (e.g. auth “100% FREE”) */
+  badge?: React.ReactNode;
+  /** Wider dialog for forms with more fields; `xl` scales like Quick Log; `app` for reading layouts */
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'app';
   /** Hide the X button (e.g. forced confirm) */
   hideClose?: boolean;
@@ -20,7 +22,7 @@ const SIZE_CLASS = {
   sm: 'max-w-sm',
   md: 'max-w-md',
   lg: 'max-w-lg',
-  xl: 'max-w-3xl',
+  xl: 'max-w-2xl lg:max-w-4xl 2xl:max-w-5xl',
   app: 'max-w-6xl',
 };
 
@@ -33,6 +35,7 @@ export default function AppModal({
   title,
   subtitle,
   children,
+  badge,
   size = 'md',
   hideClose = false,
 }: AppModalProps) {
@@ -66,11 +69,14 @@ export default function AppModal({
       >
         <div className="flex items-start justify-between gap-3 border-b border-gray-800 pb-4">
           <div className="min-w-0">
-            <BrandLogo size="md" className="mb-2" />
+            <div className="mb-2 flex items-center gap-2.5 flex-wrap">
+              <BrandLogo size="md" />
+              {badge}
+            </div>
             <h2 id="app-modal-title" className="text-base font-black text-white tracking-wide">
               {title.replace(/^(TimberVault|Logger)\s*[·•\-–—:]?\s*/i, '')}
             </h2>
-            {subtitle ? <p className="text-xs text-gray-400 mt-1">{subtitle}</p> : null}
+            {subtitle ? <p className="text-xs text-gray-400 mt-1 leading-relaxed">{subtitle}</p> : null}
           </div>
           {!hideClose && (
             <button

@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useAppStore, Board, BoardClassification, partsFingerprint } from '@/lib/store';
+import {
+  useAppStore,
+  Board,
+  BoardClassification,
+  partsFingerprint,
+  type PlanLamination,
+} from '@/lib/store';
 import {
   createCuttingPlan,
   explainUnallocated,
@@ -11,7 +17,17 @@ import {
 } from '@/lib/cutting-engine';
 import { expandLotsToStock, findSourceLot, type NestStock } from '@/lib/inventory-lots';
 import { formatDefectsList, hasDefects } from '@/lib/defects';
-import { Printer, CheckCircle2, ShieldCheck, Scissors, Box, AlertTriangle, Undo2 } from 'lucide-react';
+import {
+  Printer,
+  CheckCircle2,
+  CheckCheck,
+  ShieldCheck,
+  Scissors,
+  Box,
+  AlertTriangle,
+  Undo2,
+  Layers,
+} from 'lucide-react';
 import { notify, toast } from '@/lib/notify';
 import { displayToMm, formatDim, formatDimsLWT, mmToDisplay, unitLabel } from '@/lib/units';
 import AppModal from '@/components/AppModal';
@@ -20,9 +36,27 @@ import CutMapWorkshop from '@/components/CutMapWorkshop';
 type Props = {
   /** When user confirmed thickness mismatch, nest without enforcing part thickness */
   ignorePartThickness?: boolean;
+  /** Part ids accepted for face-lamination — nest without thickness filter */
+  laminatePartIds?: string[];
+  /** Accepted laminate layer pairings to allocate + show on sheets */
+  laminations?: PlanLamination[];
 };
 
-export default function CutListDrawing({ ignorePartThickness = false }: Props) {
+function rootPartIdFromPiece(pieceId: string, partIds: Set<string>) {
+  if (partIds.has(pieceId)) return pieceId;
+  const dash = pieceId.lastIndexOf('-');
+  if (dash > 0) {
+    const maybe = pieceId.slice(0, dash);
+    if (partIds.has(maybe)) return maybe;
+  }
+  return pieceId;
+}
+
+export default function CutListDrawing({
+  ignorePartThickness = false,
+  laminatePartIds = [],
+  laminations: laminationsProp = [],
+}: Props) {
   const store = useAppStore();
   const boards = store?.boards || [];
   const activeProjectName = store?.activeProjectName || 'New Project';
@@ -31,8 +65,13 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
   const cutHistory = store?.cutHistory || [];
   const activeCuttingPlan = store.activeCuttingPlan;
   const saveCuttingPlanToActiveProject = store.saveCuttingPlanToActiveProject;
+  const allocateStockByTags = store.allocateStockByTags;
   const undoLastCut = store.undoLastCut;
   const undoAllCuts = store.undoAllCuts;
+  const laminations =
+    laminationsProp.length > 0
+      ? laminationsProp
+      : activeCuttingPlan?.laminations || [];
   const offcutSettings = store?.offcutSettings || { minLength: 100, minWidth: 100 };
   const activeKerfMm = store?.activeKerfMm ?? store?.defaultKerfMm ?? 3.2;
   const activeStrategy = store?.activeStrategy || 'auto';
@@ -59,8 +98,19 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
     // Idle / regenerate: always take current inventory (boards logged while paused, edits, etc.)
     if (!cuttingInProgress) {
       setLockedStock(liveStock);
+      return;
     }
-  }, [liveStock, cuttingInProgress, activeProjectName, partsKey]);
+    // Mid-job: drop locked units whose parent lot was deleted from inventory
+    setLockedStock((prev) => {
+      if (!prev) return liveStock;
+      const boardIds = new Set(boards.map((b) => b.id));
+      const next = prev.filter((s) => {
+        const parentId = String(s.id).split('#')[0];
+        return boardIds.has(parentId) || boardIds.has(s.id);
+      });
+      return next.length === prev.length ? prev : next;
+    });
+  }, [liveStock, cuttingInProgress, activeProjectName, partsKey, boards]);
 
   // Plan cleared (Generate / Resume) → unlock immediately even if a prior confirm frame lingered
   useEffect(() => {
@@ -71,10 +121,30 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
 
   const nestStock = lockedStock ?? liveStock;
 
-  // Use the saved nest only when it still matches the current cut list.
-  // Stale plans (e.g. Base still Pine after you switched it to Plywood) must re-nest.
+  const nestRootFromTag = (tag: string) =>
+    tag.replace(/(?:-OP\d+-(?:REM|EDGE|OFFCUT|WASTE|PART|ASIDE|STRIP))+$/gi, '');
+
+  // Saved plan is only valid while its allocated lots still exist in inventory.
+  const savedPlanStockPresent = useMemo(() => {
+    const tags = activeCuttingPlan?.usedBoardTags || [];
+    if (tags.length === 0) return true;
+    return tags.every((tag) => {
+      const root = nestRootFromTag(tag);
+      return boards.some(
+        (b) =>
+          b.tagId === tag ||
+          b.id === tag ||
+          b.tagId === root ||
+          nestRootFromTag(b.tagId || '') === root
+      );
+    });
+  }, [activeCuttingPlan, boards]);
+
+  // Use the saved nest only when it still matches the current cut list and stock.
+  // Stale plans (species edits or deleted lots) must re-nest from live inventory.
   const useSavedPlan =
     (activeCuttingPlan?.placements?.length || 0) > 0 &&
+    savedPlanStockPresent &&
     (!activeCuttingPlan?.partsFingerprint ||
       activeCuttingPlan.partsFingerprint === partsKey);
 
@@ -103,7 +173,8 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
         species: p.species,
         length: p.length,
         width: p.width,
-        thickness: ignorePartThickness ? 0 : p.thickness ?? 0,
+        thickness:
+          ignorePartThickness || laminatePartIds.includes(p.id) ? 0 : p.thickness ?? 0,
         quantity: p.quantity,
       })),
       {
@@ -118,6 +189,7 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
     nestStock,
     activeParts,
     ignorePartThickness,
+    laminatePartIds,
     activeKerfMm,
     activeStrategy,
     offcutSettings,
@@ -127,14 +199,21 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
   useEffect(() => {
     if (useSavedPlan) return;
     if (plan.placements.length === 0 && plan.unallocated.length === 0) return;
+    const lamTags = Array.from(
+      new Set(laminations.flatMap((l) => l.boardTags || []).filter(Boolean))
+    );
+    const usedBoardTags = Array.from(
+      new Set([...(plan.usedBoardTags || []), ...lamTags])
+    );
     saveCuttingPlanToActiveProject({
       savedAt: new Date().toISOString(),
       partsFingerprint: partsKey,
       kerfMm: activeKerfMm,
       strategy: activeStrategy,
       explanation: plan.explanation,
-      usedBoardTags: plan.usedBoardTags,
+      usedBoardTags,
       placements: plan.placements,
+      laminations: laminations.length ? laminations : undefined,
       unallocated: plan.unallocated.map((p) => ({
         id: p.id,
         name: p.name,
@@ -144,13 +223,19 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
         thickness: p.thickness || 0,
       })),
     });
+    // Reserve laminate layers only after nest used them while still active
+    if (lamTags.length > 0) {
+      allocateStockByTags(lamTags);
+    }
   }, [
     useSavedPlan,
     plan,
     partsKey,
     activeKerfMm,
     activeStrategy,
+    laminations,
     saveCuttingPlanToActiveProject,
+    allocateStockByTags,
   ]);
 
   const physicalSteps = plan.placements;
@@ -211,23 +296,35 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
     }, 500);
   };
 
-  const openConfirmationModal = (step: Placement) => {
-    setConfirmStep(step);
+  const defaultRemForStep = (step: Placement) => {
     const remL = step.opKind === 'rip' && isFinishedPlacement(step) ? step.edgeLen : step.remLen;
     const remW = step.opKind === 'rip' && isFinishedPlacement(step) ? step.edgeWid : step.remWid;
-    setCustomRemLen(mmToDisplay(remL, unitSystem, unitSystem === 'imperial' ? 2 : 1));
-    setCustomRemWid(mmToDisplay(remW, unitSystem, unitSystem === 'imperial' ? 2 : 1));
     const isWaste =
       remL < offcutSettings.minLength && remW < offcutSettings.minWidth;
-    setOverrideClassification(isWaste ? 'waste' : 'reusable_offcut');
+    return {
+      remLen: mmToDisplay(remL, unitSystem, unitSystem === 'imperial' ? 2 : 1),
+      remWid: mmToDisplay(remW, unitSystem, unitSystem === 'imperial' ? 2 : 1),
+      classification: (isWaste ? 'waste' : 'reusable_offcut') as BoardClassification,
+    };
+  };
+
+  const openConfirmationModal = (step: Placement) => {
+    setConfirmStep(step);
+    const defaults = defaultRemForStep(step);
+    setCustomRemLen(defaults.remLen);
+    setCustomRemWid(defaults.remWid);
+    setOverrideClassification(defaults.classification);
   };
 
   /** Always the original nest board tag (never …-OPn-REM/EDGE/PART/…). */
   const nestRootTag = (tag: string) =>
     tag.replace(/(?:-OP\d+-(?:REM|EDGE|OFFCUT|WASTE|PART|ASIDE|STRIP))+$/gi, '');
 
-  const opDone = (s: Placement) =>
-    completedOperations.includes(`${activeProjectName}-${s.stepIndex}-${s.boardTag}`);
+  const opDone = (s: Placement, ops?: string[], projectName?: string) => {
+    const list = ops ?? completedOperations;
+    const proj = projectName ?? activeProjectName;
+    return list.includes(`${proj}-${s.stepIndex}-${s.boardTag}`);
+  };
 
   /**
    * What to pull for this step (shop flow):
@@ -237,12 +334,16 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
    */
   const resolvePullTag = (step: Placement, requireCompleted: boolean) => {
     const root = nestRootTag(step.boardTag);
+    // Live store ops when chaining cuts (mark-all) so prior steps count as done.
+    const live = requireCompleted ? useAppStore.getState() : null;
+    const opsForPull = live?.completedOperations ?? completedOperations;
+    const projectForPull = live?.activeProjectName || activeProjectName;
     const prior = physicalSteps
       .filter(
         (s) =>
           nestRootTag(s.boardTag) === root &&
           s.stepIndex < step.stepIndex &&
-          (!requireCompleted || opDone(s))
+          (!requireCompleted || opDone(s, opsForPull, projectForPull))
       )
       .sort((a, b) => b.stepIndex - a.stepIndex);
 
@@ -336,24 +437,50 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
     return `${root}-OP${stepIndex}-REM`;
   };
 
-  const executeAtomicInventoryUpdate = () => {
-    if (!confirmStep) return;
+  const partIdSet = useMemo(() => new Set(activeParts.map((p) => p.id)), [activeParts]);
 
-    const opKey = `${activeProjectName}-${confirmStep.stepIndex}-${confirmStep.boardTag}`;
-    if (completedOperations.includes(opKey)) {
-      toast.error('Operation already completed!');
-      return;
+  const completeCutStep = (
+    step: Placement,
+    remLenDisplay: number,
+    remWidDisplay: number,
+    classification: BoardClassification | null,
+    opts?: { quiet?: boolean }
+  ): { ok: true; lamination?: PlanLamination } | { ok: false; message: string } => {
+    const live = useAppStore.getState();
+    const opsNow = live.completedOperations;
+    const boardsNow = live.boards;
+    const projectName = live.activeProjectName || activeProjectName;
+    const planLams =
+      live.activeCuttingPlan?.laminations?.length
+        ? live.activeCuttingPlan.laminations
+        : laminations;
+
+    const opKey = `${projectName}-${step.stepIndex}-${step.boardTag}`;
+    if (opsNow.includes(opKey)) {
+      return { ok: false, message: 'Operation already completed!' };
     }
 
-    const stepsOnBoard = physicalSteps.filter((s) => s.boardTag === confirmStep.boardTag);
+    const stepsOnBoard = physicalSteps.filter((s) => s.boardTag === step.boardTag);
     const completedOnBoard = stepsOnBoard.filter((s) =>
-      completedOperations.includes(`${activeProjectName}-${s.stepIndex}-${s.boardTag}`)
+      opsNow.includes(`${projectName}-${s.stepIndex}-${s.boardTag}`)
     ).length;
     const isFirstOnBoard = completedOnBoard === 0;
     const isLastOnBoard = completedOnBoard + 1 >= stepsOnBoard.length;
-    const pullTag = workingStockTag(confirmStep.boardTag, confirmStep.stepIndex);
+    const pullTag = resolvePullTag(step, true);
     const sourceLot =
-      findSourceLot(confirmStep.boardTag, boards) || findSourceLot(pullTag, boards);
+      findSourceLot(step.boardTag, boardsNow) || findSourceLot(pullTag, boardsNow);
+    const rootExists = boardsNow.some(
+      (b) =>
+        b.tagId === nestRootTag(step.boardTag) ||
+        b.id === step.boardTag ||
+        nestRootTag(b.tagId || '') === nestRootTag(step.boardTag)
+    );
+    if (!sourceLot && !rootExists) {
+      return {
+        ok: false,
+        message: `Stock ${pullTag || step.boardTag} is no longer in inventory. Re-generate the cut plan from current stock.`,
+      };
+    }
     const defectFields = {
       defects: sourceLot?.defects?.length ? [...sourceLot.defects] : undefined,
       defectNotes: sourceLot?.defectNotes?.trim() || undefined,
@@ -361,12 +488,21 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
 
     const timestamp = new Date().toISOString();
     const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const root = nestRootTag(confirmStep.boardTag);
-    const isRip = confirmStep.opKind === 'rip';
-    const isBlank = confirmStep.opKind === 'blank';
-    const isFinished = isFinishedPlacement(confirmStep);
+    const root = nestRootTag(step.boardTag);
+    const isRip = step.opKind === 'rip';
+    const isBlank = step.opKind === 'blank';
+    const isFinished = isFinishedPlacement(step);
     const newRecords: Board[] = [];
     let nextPullHint: string | null = null;
+
+    const rootId = rootPartIdFromPiece(step.pieceId, partIdSet);
+    const lam = planLams.find(
+      (l) =>
+        l.partId === rootId ||
+        l.partId === step.pieceId ||
+        (l.partName &&
+          (step.partName === l.partName || step.partName.startsWith(`${l.partName} (`)))
+    );
 
     const pushBoard = (partial: Omit<Board, 'createdAt'> & { createdAt?: string }) => {
       newRecords.push({ ...defectFields, ...partial, createdAt: timestamp });
@@ -374,115 +510,112 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
 
     // Every step that produces a finished component (crosscut, or rip from an exact-length blank) yields a PART record
     if (isFinished) {
+      const finishedThickness = lam?.targetThickness || step.thickness;
       pushBoard({
         id: `part-${uid()}`,
-        tagId: `${root}-OP${confirmStep.stepIndex}-PART`,
-        species: confirmStep.species,
-        source: confirmStep.source,
+        tagId: `${root}-OP${step.stepIndex}-PART`,
+        species: step.species,
+        source: step.source,
         dimensions: {
-          length: confirmStep.cutLen,
-          width: confirmStep.cutWid,
-          thickness: confirmStep.thickness,
+          length: step.cutLen,
+          width: step.cutWid,
+          thickness: finishedThickness,
         },
-        length: confirmStep.cutLen,
-        width: confirmStep.cutWid,
-        thickness: confirmStep.thickness,
+        length: step.cutLen,
+        width: step.cutWid,
+        thickness: finishedThickness,
         quantity: 1,
-        location: confirmStep.location,
+        location: step.location,
         status: 'active',
         classification: 'finished_piece',
         parentBoardId: pullTag,
-        originProject: activeProjectName,
-        notes: `Finished piece: ${confirmStep.partName}`,
+        originProject: projectName,
+        notes: lam
+          ? `Finished piece: ${step.partName} (laminated from ${lam.boardTags.join(' + ')})`
+          : `Finished piece: ${step.partName}`,
       });
     }
 
-    const remLenMm = displayToMm(customRemLen, unitSystem);
-    const remWidMm = displayToMm(customRemWid, unitSystem);
-    const isReusable = overrideClassification === 'reusable_offcut';
-    const asideLen = confirmStep.edgeLen || 0;
-    const asideWid = confirmStep.edgeWid || 0;
+    const remLenMm = displayToMm(remLenDisplay, unitSystem);
+    const remWidMm = displayToMm(remWidDisplay, unitSystem);
+    const isReusable = classification === 'reusable_offcut';
+    const asideLen = step.edgeLen || 0;
+    const asideWid = step.edgeWid || 0;
 
     if (isBlank) {
       // Working blank (short full-width piece to rip next)
-      const blankTag = remTagForStep(confirmStep.boardTag, confirmStep.stepIndex, false, true, 'strip');
+      const blankTag = remTagForStep(step.boardTag, step.stepIndex, false, true, 'strip');
       nextPullHint = blankTag;
       pushBoard({
         id: `blank-${uid()}`,
         tagId: blankTag,
-        species: confirmStep.species,
-        source: confirmStep.source,
+        species: step.species,
+        source: step.source,
         dimensions: {
-          length: confirmStep.cutLen,
-          width: confirmStep.cutWid,
-          thickness: confirmStep.thickness,
+          length: step.cutLen,
+          width: step.cutWid,
+          thickness: step.thickness,
         },
-        length: confirmStep.cutLen,
-        width: confirmStep.cutWid,
-        thickness: confirmStep.thickness,
+        length: step.cutLen,
+        width: step.cutWid,
+        thickness: step.thickness,
         quantity: 1,
-        location: confirmStep.location,
+        location: step.location,
         status: 'active',
         classification: 'reusable_offcut',
         parentBoardId: pullTag,
-        originProject: activeProjectName,
+        originProject: projectName,
         notes: `Working blank, rip strip from this next`,
       });
       // Long continuous offcut left on the original board
       if (remLenMm > 0.5 && remWidMm > 0.5) {
-        const longTag = remTagForStep(
-          confirmStep.boardTag,
-          confirmStep.stepIndex,
-          false,
-          isReusable,
-          'aside'
-        );
+        const longTag = remTagForStep(step.boardTag, step.stepIndex, false, isReusable, 'aside');
         pushBoard({
           id: `long-${uid()}`,
           tagId: longTag,
-          species: confirmStep.species,
-          source: confirmStep.source,
+          species: step.species,
+          source: step.source,
           dimensions: {
             length: Number(remLenMm.toFixed(1)),
             width: Number(remWidMm.toFixed(1)),
-            thickness: confirmStep.thickness,
+            thickness: step.thickness,
           },
           length: Number(remLenMm.toFixed(1)),
           width: Number(remWidMm.toFixed(1)),
-          thickness: confirmStep.thickness,
+          thickness: step.thickness,
           quantity: 1,
-          location: confirmStep.location,
+          location: step.location,
           status: 'active',
           classification: isReusable ? 'reusable_offcut' : 'waste',
           parentBoardId: pullTag,
-          originProject: activeProjectName,
+          originProject: projectName,
           notes: `Continuous offcut preserved by blank-first cut`,
         });
       }
     } else if (isRip) {
       // Only create an intermediate working strip when this rip is NOT already a finished part
       if (!isFinished && remLenMm > 0.5 && remWidMm > 0.5) {
-        const stripTag = remTagForStep(confirmStep.boardTag, confirmStep.stepIndex, false, true, 'strip');
+        const stripTag = remTagForStep(step.boardTag, step.stepIndex, false, true, 'strip');
         nextPullHint = stripTag;
         pushBoard({
           id: `strip-${uid()}`,
           tagId: stripTag,
-          species: confirmStep.species,
-          source: confirmStep.source,
+          species: step.species,
+          source: step.source,
           dimensions: {
             length: Number(remLenMm.toFixed(1)),
             width: Number(remWidMm.toFixed(1)),
-            thickness: confirmStep.thickness,
+            thickness: step.thickness,
           },
           length: Number(remLenMm.toFixed(1)),
           width: Number(remWidMm.toFixed(1)),
-          thickness: confirmStep.thickness,
+          thickness: step.thickness,
           quantity: 1,
-          location: confirmStep.location,
+          location: step.location,
           status: 'active',
           classification: 'reusable_offcut',
           parentBoardId: pullTag,
-          originProject: activeProjectName,
+          originProject: projectName,
           notes: `Working strip after rip, crosscut parts from this`,
         });
       }
@@ -490,37 +623,37 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
       const effAsideLen = isFinished && remLenMm > 0.5 ? remLenMm : asideLen;
       const effAsideWid = isFinished && remWidMm > 0.5 ? remWidMm : asideWid;
       if (effAsideLen > 0.5 && effAsideWid > 0.5) {
-        const asideTag = remTagForStep(confirmStep.boardTag, confirmStep.stepIndex, false, true, 'aside');
+        const asideTag = remTagForStep(step.boardTag, step.stepIndex, false, true, 'aside');
         if (isFinished) nextPullHint = asideTag;
         const asideWaste =
           effAsideLen < offcutSettings.minLength && effAsideWid < offcutSettings.minWidth;
         pushBoard({
           id: `aside-${uid()}`,
           tagId: asideTag,
-          species: confirmStep.species,
-          source: confirmStep.source,
+          species: step.species,
+          source: step.source,
           dimensions: {
             length: Number(effAsideLen.toFixed(1)),
             width: Number(effAsideWid.toFixed(1)),
-            thickness: confirmStep.thickness,
+            thickness: step.thickness,
           },
           length: Number(effAsideLen.toFixed(1)),
           width: Number(effAsideWid.toFixed(1)),
-          thickness: confirmStep.thickness,
+          thickness: step.thickness,
           quantity: 1,
-          location: confirmStep.location,
+          location: step.location,
           status: asideWaste ? 'consumed' : 'active',
           classification: asideWaste ? 'waste' : 'reusable_offcut',
           parentBoardId: pullTag,
-          originProject: activeProjectName,
+          originProject: projectName,
           notes: `Set-aside odd piece after rip, use for next strip / leftover`,
         });
       }
     } else if (remLenMm > 0.5 && remWidMm > 0.5) {
       // Remaining length of the strip after this finished part
       nextPullHint = remTagForStep(
-        confirmStep.boardTag,
-        confirmStep.stepIndex,
+        step.boardTag,
+        step.stepIndex,
         isLastOnBoard,
         isReusable,
         'rem'
@@ -528,49 +661,155 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
       pushBoard({
         id: `rem-${uid()}`,
         tagId: nextPullHint,
-        species: confirmStep.species,
-        source: confirmStep.source,
+        species: step.species,
+        source: step.source,
         dimensions: {
           length: Number(remLenMm.toFixed(1)),
           width: Number(remWidMm.toFixed(1)),
-          thickness: confirmStep.thickness,
+          thickness: step.thickness,
         },
         length: Number(remLenMm.toFixed(1)),
         width: Number(remWidMm.toFixed(1)),
-        thickness: confirmStep.thickness,
+        thickness: step.thickness,
         quantity: 1,
-        location: confirmStep.location,
+        location: step.location,
         status: isLastOnBoard && !isReusable ? 'consumed' : 'active',
         classification: isLastOnBoard
-          ? overrideClassification || 'reusable_offcut'
+          ? classification || 'reusable_offcut'
           : 'reusable_offcut',
         parentBoardId: pullTag,
-        originProject: activeProjectName,
+        originProject: projectName,
         notes: isLastOnBoard
           ? `Final remnant from ${root}`
-          : `Strip remnant after step ${confirmStep.stepIndex}`,
+          : `Strip remnant after step ${step.stepIndex}`,
       });
     }
 
-    store.processCuttingOperation(opKey, newRecords, {
-      takeFromLotTag: isFirstOnBoard ? confirmStep.boardTag : undefined,
-      consumeExactTags: !isFirstOnBoard && pullTag !== nestRootTag(confirmStep.boardTag) ? [pullTag] : [],
+    const secondaryLamTags =
+      isFinished && lam
+        ? lam.boardTags.filter(
+            (t) =>
+              t &&
+              t !== step.boardTag &&
+              t !== pullTag &&
+              nestRootTag(t) !== nestRootTag(step.boardTag)
+          )
+        : [];
+
+    live.processCuttingOperation(opKey, newRecords, {
+      takeFromLotTag: isFirstOnBoard ? step.boardTag : undefined,
+      takeFromLotTags: secondaryLamTags,
+      consumeExactTags:
+        !isFirstOnBoard && pullTag !== nestRootTag(step.boardTag) ? [pullTag] : [],
     });
 
-    const doneFinished =
-      finishedLogged + (isFinished ? 1 : 0);
-    toast.success(
-      isBlank && nextPullHint
-        ? `Blank cut, long offcut saved, rip from ${nextPullHint}`
-        : isRip && !isFinished && nextPullHint
-          ? `Rip complete, crosscut from ${nextPullHint}. Finished still ${doneFinished}/${finishedSteps.length}`
-          : isFinished
-            ? `Finished ${doneFinished}/${finishedSteps.length} saved${nextPullHint ? `, next pull ${nextPullHint}` : ''}`
-            : isLastOnBoard
-              ? `Board sequence finished, ${doneFinished}/${finishedSteps.length} finished pieces.`
-              : 'Cut complete, inventory updated.'
+    if (!opts?.quiet) {
+      const finishedDoneNow = finishedSteps.filter((s) =>
+        useAppStore
+          .getState()
+          .completedOperations.includes(`${projectName}-${s.stepIndex}-${s.boardTag}`)
+      ).length;
+      toast.success(
+        isBlank && nextPullHint
+          ? `Blank cut, long offcut saved, rip from ${nextPullHint}`
+          : isRip && !isFinished && nextPullHint
+            ? `Rip complete, crosscut from ${nextPullHint}. Finished still ${finishedDoneNow}/${finishedSteps.length}`
+            : isFinished
+              ? `Finished ${finishedDoneNow}/${finishedSteps.length} saved${nextPullHint ? `, next pull ${nextPullHint}` : ''}`
+              : isLastOnBoard
+                ? `Board sequence finished, ${finishedDoneNow}/${finishedSteps.length} finished pieces.`
+                : 'Cut complete, inventory updated.'
+      );
+    }
+
+    return { ok: true, lamination: isFinished ? lam : undefined };
+  };
+
+  const promptRelogAfterLaminate = async (lam: PlanLamination) => {
+    await notify.confirm({
+      title: 'Re-log leftover after laminating',
+      message:
+        `Layers ${lam.boardTags.join(' + ')} were consumed for “${lam.partName}” ` +
+        `(glue-up to ~${formatDim(lam.totalThickness, unitSystem)}, target ${formatDim(lam.targetThickness, unitSystem)}).\n\n` +
+        `Measure any leftover laminated blank or offcut and log it in Quick Log with the new dimensions.\n\n` +
+        `The old layer tags are used — do not treat them as remaining stock.`,
+      confirmLabel: 'Got it',
+      requireCheck:
+        'I will re-log any reusable leftover in Quick Log (or there is none)',
+    });
+  };
+
+  const executeAtomicInventoryUpdate = async () => {
+    if (!confirmStep) return;
+    const result = completeCutStep(
+      confirmStep,
+      customRemLen,
+      customRemWid,
+      overrideClassification
     );
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     setConfirmStep(null);
+    if (result.lamination) {
+      await promptRelogAfterLaminate(result.lamination);
+    }
+  };
+
+  const remainingSteps = physicalSteps.filter((s) => !opDone(s));
+  const nextIncompleteStep = remainingSteps[0] || null;
+
+  const handleMarkAllRemaining = async () => {
+    if (remainingSteps.length === 0) {
+      toast.success('All cuts are already complete.');
+      return;
+    }
+    const ok = await notify.confirm({
+      title: `Mark all ${remainingSteps.length} remaining cuts complete?`,
+      message:
+        `This will mark every unfinished cut as done, in order, and update inventory for each one.\n\n` +
+        `Remnant sizes will use the plan defaults.\n\n` +
+        `To change a remnant size yourself, cancel and use the green button on each cut instead.\n\n` +
+        `You can Undo all cuts later if needed.`,
+      confirmLabel: `Mark all ${remainingSteps.length}`,
+    });
+    if (!ok) return;
+
+    let done = 0;
+    const laminatedFinished: PlanLamination[] = [];
+    for (const step of remainingSteps) {
+      const defaults = defaultRemForStep(step);
+      const result = completeCutStep(
+        step,
+        defaults.remLen,
+        defaults.remWid,
+        defaults.classification,
+        { quiet: true }
+      );
+      if (!result.ok) {
+        toast.error(
+          result.message ||
+            `Stopped at step ${step.stepIndex}. ${done} cut${done === 1 ? '' : 's'} completed before that.`
+        );
+        return;
+      }
+      if (result.lamination) laminatedFinished.push(result.lamination);
+      done += 1;
+    }
+    toast.success(
+      done === 1
+        ? 'Marked 1 cut complete and updated inventory.'
+        : `Marked all ${done} remaining cuts complete and updated inventory.`
+    );
+    if (laminatedFinished.length > 0) {
+      const unique = Array.from(
+        new Map(laminatedFinished.map((l) => [l.partId, l])).values()
+      );
+      for (const lam of unique) {
+        await promptRelogAfterLaminate(lam);
+      }
+    }
   };
 
   if (activeParts.length === 0) {
@@ -684,18 +923,28 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
         </div>
       )}
 
-      <div className="no-print bg-[#1e2228] border border-gray-800 p-4 rounded-xl shadow-xl space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <span className="text-xs font-mono text-gray-300">
-            Cut plan, Project:{' '}
-            <strong className="text-white uppercase">{activeProjectName}</strong>
-            <span className="text-gray-500">, offcuts tagged to this name</span>
-            <span className="text-emerald-400">
-              {' '}
-             , finished {finishedLogged}/{finishedSteps.length}
-            </span>
-          </span>
-          <div className="flex flex-wrap gap-2">
+      <div className="no-print bg-[#1e2228] border border-gray-800 p-5 rounded-2xl shadow-xl space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1.5 min-w-0">
+            <p className="text-[11px] uppercase tracking-wider text-gray-500 font-bold m-0">
+              Cut plan
+            </p>
+            <h3 className="text-base font-black text-white m-0 tracking-wide uppercase">
+              {activeProjectName}
+            </h3>
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="px-2 py-0.5 rounded-md bg-[#121417] border border-gray-700 text-gray-300">
+                Offcuts tagged to this project
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-950/50 border border-emerald-700/50 text-emerald-300 font-bold">
+                Finished {finishedLogged}/{finishedSteps.length}
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-[#121417] border border-gray-700 text-gray-400">
+                {physicalSteps.length} shop step{physicalSteps.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
             <button
               type="button"
               disabled={cutHistory.length === 0}
@@ -704,10 +953,10 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                 if (result.ok) toast.success(result.message);
                 else toast.error(result.message);
               }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold cursor-pointer"
               title="Restore inventory to before the last confirmed cut"
             >
-              <Undo2 className="w-4 h-4" /> Undo last cut
+              <Undo2 className="w-4 h-4" /> Undo last
             </button>
             <button
               type="button"
@@ -724,97 +973,187 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                 if (result.ok) toast.success(result.message);
                 else toast.error(result.message);
               }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-amber-300 rounded-xl text-xs font-bold cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-amber-300 rounded-xl text-xs font-bold cursor-pointer"
               title="Undo every confirmed cut and restore stock"
             >
-              <Undo2 className="w-4 h-4" /> Undo all cuts
+              <Undo2 className="w-4 h-4" /> Undo all
+            </button>
+            <button
+              type="button"
+              disabled={remainingSteps.length === 0}
+              onClick={() => void handleMarkAllRemaining()}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-xs font-bold cursor-pointer"
+              title="Confirm every remaining cut in order using planned remnant sizes"
+            >
+              <CheckCheck className="w-4 h-4" />
+              {remainingSteps.length === 0
+                ? 'All cuts complete'
+                : `Mark all remaining (${remainingSteps.length})`}
             </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-600/30 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-600/30 cursor-pointer"
             >
-              <Printer className="w-4 h-4" /> Print cutting sheets ({physicalSteps.length})
+              <Printer className="w-4 h-4" /> Print sheets ({physicalSteps.length})
             </button>
           </div>
         </div>
 
-        <div className="bg-[#121417] p-3 rounded-lg border border-gray-800 text-xs font-mono space-y-2">
-          <div className="text-orange-400 font-bold flex items-center gap-2">
-            <Box className="w-4 h-4" /> Allocated stock boards
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {plan.usedBoardTags.map((tag) => {
-              const board = boards.find((b) => b.tagId === tag || b.id === tag);
-              return (
-                <div
-                  key={tag}
-                  className="bg-[#1e2228] p-2.5 rounded border border-emerald-500/50 text-white"
-                >
-                  <div>
-                    Tag: <strong className="text-emerald-400">{tag}</strong>
-                  </div>
-                  {board && (
-                    <div className="text-gray-300 text-[11px]">
-                      {board.species} ({formatDimsLWT(board.length, board.width, board.thickness, unitSystem)}) ,{' '}
-                      {board.source}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {plan.explanation && (
-            <div className="pt-2 border-t border-gray-800 text-[11px] text-gray-300 font-sans">
-              <strong className="text-emerald-400">Cutting strategy:</strong> {plan.explanation}
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-3">
+          <div className="bg-[#121417] p-3.5 rounded-xl border border-gray-800 space-y-2.5">
+            <div className="text-orange-400 font-bold flex items-center gap-2 text-xs">
+              <Box className="w-4 h-4" /> Allocated stock
             </div>
-          )}
-          {plan.betterAlternative && (
-            <div className="mt-2 p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200 font-sans flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <strong className="text-amber-300">Better sequence available:</strong>{' '}
-                {plan.betterAlternative.reason}
-              </div>
-              {setActiveStrategy && (
-                <button
-                  type="button"
-                  onClick={() => setActiveStrategy(plan.betterAlternative!.strategy)}
-                  className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded text-[11px] shrink-0 cursor-pointer"
-                >
-                  Switch to {plan.betterAlternative.label}
-                </button>
-              )}
-            </div>
-          )}
-          {plan.offcuts && plan.offcuts.length > 0 && (
-            <div className="pt-2 border-t border-gray-800 space-y-1">
-              <div className="text-[11px] text-gray-400 font-sans font-semibold">
-                Remaining material from this plan:
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {plan.offcuts.map((o, idx) => (
-                  <span
-                    key={`${o.boardTag}-${idx}`}
-                    className={`px-2 py-0.5 rounded text-[11px] border ${
-                      o.tier === 'reusable'
-                        ? 'bg-emerald-950/40 border-emerald-600/50 text-emerald-300'
-                        : o.tier === 'potentially_reusable'
-                          ? 'bg-sky-950/40 border-sky-600/50 text-sky-300'
-                          : 'bg-zinc-900 border-zinc-700 text-gray-400'
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {plan.usedBoardTags.map((tag) => {
+                const root = nestRootTag(tag);
+                const board = boards.find(
+                  (b) =>
+                    b.tagId === tag ||
+                    b.id === tag ||
+                    b.tagId === root ||
+                    nestRootTag(b.tagId || '') === root
+                );
+                const missing = !board;
+                const isLamLayer = laminations.some((l) =>
+                  (l.boardTags || []).some(
+                    (t) => t === tag || nestRootTag(t) === root || t === board?.tagId
+                  )
+                );
+                return (
+                  <div
+                    key={tag}
+                    className={`rounded-xl border px-3 py-2.5 space-y-1 ${
+                      missing
+                        ? 'border-red-500/50 bg-red-950/20'
+                        : board?.status === 'consumed'
+                          ? 'border-zinc-600/60 bg-[#1a1d22]'
+                          : board?.status === 'allocated' || isLamLayer
+                            ? 'border-amber-500/40 bg-amber-950/15'
+                            : 'border-emerald-500/40 bg-[#1e2228]'
                     }`}
                   >
-                    {o.boardTag}: {formatDim(o.length, unitSystem)} × {formatDim(o.width, unitSystem)} (
-                    {o.tier === 'reusable'
-                      ? 'reusable offcut'
-                      : o.tier === 'potentially_reusable'
-                        ? 'small reusable'
-                        : 'scrap'}
-                    )
-                  </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <strong
+                        className={`font-mono text-sm ${
+                          missing ? 'text-red-400' : 'text-emerald-400'
+                        }`}
+                      >
+                        {tag}
+                      </strong>
+                      <span
+                        className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border ${
+                          missing
+                            ? 'border-red-600/50 text-red-300'
+                            : board?.status === 'consumed'
+                              ? 'border-zinc-600 text-zinc-400'
+                              : board?.status === 'allocated' || isLamLayer
+                                ? 'border-amber-700/50 text-amber-200'
+                                : 'border-emerald-700/50 text-emerald-300'
+                        }`}
+                      >
+                        {missing
+                          ? 'Missing'
+                          : board?.status === 'consumed'
+                            ? 'Consumed'
+                            : isLamLayer
+                              ? 'Laminate'
+                              : board?.status === 'allocated'
+                                ? 'Allocated'
+                                : 'In plan'}
+                      </span>
+                    </div>
+                    {board ? (
+                      <div className="text-[11px] text-gray-300 leading-snug">
+                        <div className="font-semibold text-white">{board.species}</div>
+                        <div>
+                          {formatDimsLWT(board.length, board.width, board.thickness, unitSystem)}
+                        </div>
+                        <div className="text-gray-500">{board.source}</div>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-red-300/90">
+                        Removed from inventory — not available
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {laminations.length > 0 && (
+              <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-3 space-y-2">
+                <div className="text-amber-300 font-bold text-[11px] flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" /> Face laminate before cutting
+                </div>
+                {laminations.map((lam) => (
+                  <div key={lam.partId} className="text-[11px] text-amber-100/95 leading-snug">
+                    <strong className="text-white">{lam.partName}</strong>: glue{' '}
+                    <span className="font-mono">{lam.boardTags.join(' + ')}</span>
+                    {' → '}
+                    plane to {formatDim(lam.targetThickness, unitSystem)}, then cut. After
+                    cutting, re-log any leftover laminated stock in Quick Log.
+                  </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {plan.explanation && (
+              <div className="bg-[#121417] border border-gray-800 rounded-xl p-3.5 text-[11px] text-gray-300 font-sans leading-relaxed">
+                <div className="text-emerald-400 font-bold mb-1">Cutting strategy</div>
+                {plan.explanation}
+              </div>
+            )}
+            {plan.betterAlternative && (
+              <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200 font-sans flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <strong className="text-amber-300">Better sequence available:</strong>{' '}
+                  {plan.betterAlternative.reason}
+                </div>
+                {setActiveStrategy && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveStrategy(plan.betterAlternative!.strategy)}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-[11px] shrink-0 cursor-pointer"
+                  >
+                    Switch to {plan.betterAlternative.label}
+                  </button>
+                )}
+              </div>
+            )}
+            {plan.offcuts && plan.offcuts.length > 0 && (
+              <div className="bg-[#121417] border border-gray-800 rounded-xl p-3.5 space-y-2">
+                <div className="text-[11px] text-gray-400 font-sans font-semibold">
+                  Remaining material from this plan
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {plan.offcuts.map((o, idx) => (
+                    <span
+                      key={`${o.boardTag}-${idx}`}
+                      className={`px-2 py-0.5 rounded text-[11px] border ${
+                        o.tier === 'reusable'
+                          ? 'bg-emerald-950/40 border-emerald-600/50 text-emerald-300'
+                          : o.tier === 'potentially_reusable'
+                            ? 'bg-sky-950/40 border-sky-600/50 text-sky-300'
+                            : 'bg-zinc-900 border-zinc-700 text-gray-400'
+                      }`}
+                    >
+                      {o.boardTag}: {formatDim(o.length, unitSystem)} ×{' '}
+                      {formatDim(o.width, unitSystem)} (
+                      {o.tier === 'reusable'
+                        ? 'reusable offcut'
+                        : o.tier === 'potentially_reusable'
+                          ? 'small reusable'
+                          : 'scrap'}
+                      )
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1020,20 +1359,27 @@ export default function CutListDrawing({ ignorePartThickness = false }: Props) {
                 </span>
 
                 <div className="print:hidden w-full sm:w-auto">
-                  {!isCompleted && (
-                    <button
-                      type="button"
-                      onClick={() => openConfirmationModal(step)}
-                      className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <ShieldCheck className="w-4 h-4" />{' '}
-                      {isBlank
-                        ? 'MARK BLANK CUT COMPLETE'
-                        : isRip
-                          ? 'MARK RIP COMPLETE & UPDATE INVENTORY'
-                          : 'MARK CUT COMPLETE & UPDATE INVENTORY'}
-                    </button>
-                  )}
+                  {!isCompleted &&
+                    (nextIncompleteStep &&
+                    nextIncompleteStep.stepIndex === step.stepIndex &&
+                    nextIncompleteStep.boardTag === step.boardTag ? (
+                      <button
+                        type="button"
+                        onClick={() => openConfirmationModal(step)}
+                        className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <ShieldCheck className="w-4 h-4" />{' '}
+                        {isBlank
+                          ? 'MARK BLANK CUT COMPLETE'
+                          : isRip
+                            ? 'MARK RIP COMPLETE & UPDATE INVENTORY'
+                            : 'MARK CUT COMPLETE & UPDATE INVENTORY'}
+                      </button>
+                    ) : (
+                      <span className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-zinc-100 border border-zinc-300 text-zinc-500">
+                        Waiting — complete earlier steps first
+                      </span>
+                    ))}
                 </div>
               </div>
             </div>

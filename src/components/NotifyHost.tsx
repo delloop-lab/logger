@@ -19,9 +19,15 @@ function ConfirmCard({ item }: { item: NotifyRequest }) {
   const button = item.danger
     ? 'bg-red-600 hover:bg-red-500'
     : 'bg-orange-600 hover:bg-orange-500';
+  const [ackChecked, setAckChecked] = useState(false);
+  const needsAck = Boolean(item.requireCheck);
 
   const close = (ok: boolean) => dismissNotify(item.id, ok);
   const choose = (actionId: string | null) => dismissChoice(item.id, actionId);
+
+  useEffect(() => {
+    setAckChecked(false);
+  }, [item.id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -84,6 +90,18 @@ function ConfirmCard({ item }: { item: NotifyRequest }) {
           {item.message}
         </p>
 
+        {isConfirm && needsAck && item.requireCheck ? (
+          <label className="flex items-start gap-2.5 rounded-xl border border-amber-700/50 bg-amber-950/30 px-3.5 py-3 text-xs text-amber-100 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={ackChecked}
+              onChange={(e) => setAckChecked(e.target.checked)}
+              className="mt-0.5 accent-orange-500 cursor-pointer shrink-0"
+            />
+            <span className="leading-snug">{item.requireCheck}</span>
+          </label>
+        ) : null}
+
         <div className="flex flex-col gap-2 pt-1">
           {isChoice &&
             (item.actions || []).map((action) => (
@@ -115,7 +133,8 @@ function ConfirmCard({ item }: { item: NotifyRequest }) {
               <button
                 type="button"
                 onClick={() => close(true)}
-                className={`flex-1 px-4 py-2.5 text-white text-xs font-bold rounded-xl cursor-pointer ${button}`}
+                disabled={needsAck && !ackChecked}
+                className={`flex-1 px-4 py-2.5 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${button}`}
               >
                 {item.confirmLabel || 'Confirm'}
               </button>

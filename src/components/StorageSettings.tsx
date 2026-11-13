@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   MapPin,
   Layers,
+  Truck,
 } from 'lucide-react';
 import { notify, toast } from '@/lib/notify';
 import { displayToMm, formatDim, mmToDisplay, unitLabel, type UnitSystem } from '@/lib/units';
@@ -29,6 +30,7 @@ import {
   todayDateString,
   type StoredBackupRecord,
 } from '@/lib/backup-vault';
+import { DEFAULT_SUPPLIERS } from '@/lib/store';
 
 export default function StorageSettings() {
   const store = useAppStore();
@@ -37,6 +39,7 @@ export default function StorageSettings() {
   const lumberTypes = store.lumberTypes?.length
     ? store.lumberTypes
     : [...DEFAULT_LUMBER_TYPES];
+  const suppliers = store.suppliers?.length ? store.suppliers : [...DEFAULT_SUPPLIERS];
   const unitSystem = store.unitSystem;
   const setUnitSystem = store.setUnitSystem;
   const defaultKerfMm = store.defaultKerfMm;
@@ -54,6 +57,7 @@ export default function StorageSettings() {
   );
   const [newLocation, setNewLocation] = useState('');
   const [newLumberType, setNewLumberType] = useState('');
+  const [newSupplier, setNewSupplier] = useState('');
   const [editingLumber, setEditingLumber] = useState<string | null>(null);
   const [editLumberValue, setEditLumberValue] = useState('');
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -139,6 +143,24 @@ export default function StorageSettings() {
       minWidth: displayToMm(wDisplay, unitSystem),
     });
     toast.success('Updated offcut classification thresholds!');
+  };
+
+  const handleAddSupplier = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newSupplier.trim();
+    if (!name) return;
+    if (suppliers.some((s) => s.toLowerCase() === name.toLowerCase())) {
+      toast.error('That supplier is already in the list.');
+      return;
+    }
+    store.updateSuppliers([...suppliers, name]);
+    setNewSupplier('');
+    toast.success(`Added supplier: ${name}`);
+  };
+
+  const handleDeleteSupplier = (name: string) => {
+    store.updateSuppliers(suppliers.filter((s) => s.toLowerCase() !== name.toLowerCase()));
+    toast.success(`Removed supplier: ${name}`);
   };
 
   const handleAddLocation = (e: React.FormEvent) => {
@@ -466,6 +488,50 @@ export default function StorageSettings() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Suppliers */}
+      <div className="bg-[#1e2228] border border-gray-800 p-5 rounded-2xl space-y-3 shadow-xl">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2">
+          <Truck className="w-4 h-4 text-orange-500" /> Suppliers ({suppliers.length})
+        </h3>
+        <p className="text-[11px] text-gray-400 m-0">
+          Used by the Supplier dropdown in Quick Log for New / Purchased stock. Choose Other… there
+          to add a one-off name.
+        </p>
+        <form onSubmit={handleAddSupplier} className="flex gap-2 max-w-xl">
+          <input
+            type="text"
+            placeholder="Add supplier (e.g. specialty hardwood yard)…"
+            value={newSupplier}
+            onChange={(e) => setNewSupplier(e.target.value)}
+            className="flex-1 min-w-0 bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-orange-500"
+          />
+          <button
+            type="submit"
+            className="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5 text-orange-500" /> Add
+          </button>
+        </form>
+        <div className="flex flex-wrap gap-2">
+          {suppliers.map((name) => (
+            <div
+              key={name}
+              className="bg-[#121417] border border-gray-800/90 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs text-gray-200"
+            >
+              <span className="font-mono">{name}</span>
+              <button
+                type="button"
+                onClick={() => handleDeleteSupplier(name)}
+                className="text-gray-400 hover:text-red-400 p-0.5 cursor-pointer"
+                aria-label={`Remove ${name}`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 

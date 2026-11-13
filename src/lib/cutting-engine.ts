@@ -287,17 +287,18 @@ export function normalizeSpecies(value: string): string {
     .trim();
 }
 
-/** Species match only — source (Salvage, Pallet, etc.) must never block a match */
+/** Species match only — source (Salvage, Pallet, etc.) must never block a match.
+ * Never substitutes a different species when the required wood is missing.
+ */
 export function speciesMatches(required: string, boardSpecies: string): boolean {
   const a = normalizeSpecies(required);
   const b = normalizeSpecies(boardSpecies);
   if (!a || !b) return false;
   if (a === b) return true;
+  // Explicit wildcard only (e.g. "Any wood")
+  if (/\bany\b/.test(a) || /\bany\b/.test(b)) return true;
+  // Pine family aliases (Pine ↔ Pine / Pallet)
   if (a.includes('pine') && b.includes('pine')) return true;
-  if ((a.includes('ply') || a.includes('birch')) && (b.includes('ply') || b.includes('birch'))) {
-    return true;
-  }
-  if (a.includes('any') || b.includes('any')) return true;
   return false;
 }
 
@@ -367,13 +368,8 @@ export function diagnoseUnallocated(
     const thickest = matching.reduce((a, b) =>
       resolvedBoardDims(a).thickness >= resolvedBoardDims(b).thickness ? a : b
     );
-    const largeFace = matching.reduce((a, b) => {
-      const da = resolvedBoardDims(a);
-      const db = resolvedBoardDims(b);
-      return da.length * da.width >= db.length * db.width ? a : b;
-    });
-    const lf = resolvedBoardDims(largeFace);
-    return `${piece.species} stock is too thin (need ${needT} mm). Thickest on hand: ${formatStockBrief(thickest)}. Largest face (still too thin): ${largeFace.tagId} (${Math.round(lf.length)}×${Math.round(lf.width)}×${Math.round(lf.thickness)} mm).`;
+    const thickestT = Math.round(resolvedBoardDims(thickest).thickness);
+    return `${piece.species} stock is too thin. Required thickness: ${needT} mm · Max available: ${thickestT} mm (${thickest.tagId}).`;
   }
 
   const faceOk = thickOk.filter((b) => boardFaceFits(b, piece));

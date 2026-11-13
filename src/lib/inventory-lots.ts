@@ -62,7 +62,7 @@ export function resolveUnitsIssued(lot: Board, allBoards: Board[]): number {
  * Never re-nest finished parts, waste, or mid-sequence working strips/remnants (-STRIP / -REM).
  */
 export function isNestableStock(b: Board): boolean {
-  if (b.status === 'consumed') return false;
+  if (b.status === 'consumed' || b.status === 'allocated') return false;
   if (b.classification === 'finished_piece' || b.classification === 'waste') return false;
   if (/-PART$/i.test(b.tagId || '')) return false;
   if (/-OP\d+-(?:REM|STRIP|WASTE)$/i.test(b.tagId || '')) return false;

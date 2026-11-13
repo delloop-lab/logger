@@ -72,6 +72,19 @@ export interface CutPart {
 export type ProjectStatus = 'active' | 'paused' | 'completed';
 export type ProjectDifficulty = 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
 
+/** Face-lamination pairing accepted during stock check (thickness glue-up). */
+export interface PlanLamination {
+  partId: string;
+  partName: string;
+  /** Nest-stock / board ids for the layers */
+  boardIds: string[];
+  /** Pull tags for the layers (preferred for consume / display) */
+  boardTags: string[];
+  totalThickness: number;
+  targetThickness: number;
+  label: string;
+}
+
 /** Snapshot of the nesting plan used for confirmed shop cuts. */
 export interface SavedCuttingPlan {
   savedAt: string;
@@ -82,6 +95,8 @@ export interface SavedCuttingPlan {
   explanation?: string;
   usedBoardTags: string[];
   placements: Placement[];
+  /** Parts that will be face-laminated from thinner stock layers */
+  laminations?: PlanLamination[];
   unallocated?: Array<{
     id: string;
     name: string;
@@ -159,6 +174,8 @@ export type WorkspaceData = {
   storageLocations: string[];
   /** Editable lumber / species catalog for Quick Log and project parts */
   lumberTypes: string[];
+  /** Editable supplier catalog for Quick Log (New / Purchased). */
+  suppliers: string[];
   savedProjects: SavedProject[];
   activeProjectName: string;
   /** Description / build notes for the open project (shown in Projects & Cuts and What Can I Build). */
@@ -229,9 +246,12 @@ interface AppState extends WorkspaceData {
 
   addBoard: (board: Board) => void;
   removeBoard: (id: string) => void;
+  /** Remove several lots in one revision bump (inventory multi-delete). */
+  removeBoards: (ids: string[]) => void;
   updateBoard: (board: Board) => void;
   updateStorageLocations: (locations: string[]) => void;
   updateLumberTypes: (types: string[]) => void;
+  updateSuppliers: (suppliers: string[]) => void;
   /** Rename a lumber type and update boards / open parts that use the old label. */
   renameLumberType: (
     from: string,
@@ -248,10 +268,16 @@ interface AppState extends WorkspaceData {
     options?: {
       /** Decrement/consume this inventory lot (first cut on a stock board) */
       takeFromLotTag?: string;
+      /** Extra lots to decrement (e.g. secondary laminate layers) */
+      takeFromLotTags?: string[];
       /** Exact tags to mark consumed (e.g. previous remnant) */
       consumeExactTags?: string[];
     }
   ) => void;
+  /** Reserve stock for a plan (status → allocated). Upsert only — no deletes. */
+  allocateStockByTags: (tags: string[]) => void;
+  /** Return allocated lots to active (e.g. when clearing a plan). */
+  releaseAllocatedByTags: (tags: string[]) => void;
   undoLastCut: () => { ok: true; message: string } | { ok: false; message: string };
   /** Undo every confirmed cut (newest first) — restores stock and removes parts/offcuts from cuts */
   undoAllCuts: () => { ok: true; message: string } | { ok: false; message: string };
@@ -336,6 +362,47 @@ export const DEFAULT_LOCATIONS = [
   'Offcut Bin',
 ];
 
+export const DEFAULT_SUPPLIERS = ['Bunnings', 'Local timber yard'];
+
+const SUPPLIERS_STORAGE_KEY = 'logger_suppliers_v1';
+
+function normalizeSuppliers(list: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of list) {
+    const name = String(raw || '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+function readStoredSuppliers(): string[] {
+  if (typeof window === 'undefined') return [...DEFAULT_SUPPLIERS];
+  try {
+    const raw = window.localStorage.getItem(SUPPLIERS_STORAGE_KEY);
+    if (!raw) return [...DEFAULT_SUPPLIERS];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...DEFAULT_SUPPLIERS];
+    const next = normalizeSuppliers(parsed.map(String));
+    return next.length ? next : [...DEFAULT_SUPPLIERS];
+  } catch {
+    return [...DEFAULT_SUPPLIERS];
+  }
+}
+
+function writeStoredSuppliers(list: string[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(SUPPLIERS_STORAGE_KEY, JSON.stringify(normalizeSuppliers(list)));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 export const PROJECT_TEMPLATES: ProjectTemplate[] = [
   {
     id: 'tpl-cutting-board',
@@ -378,6 +445,7 @@ const FRESH_STATE: WorkspaceData = {
   boards: [],
   storageLocations: [...DEFAULT_LOCATIONS],
   lumberTypes: [...DEFAULT_LUMBER_TYPES],
+  suppliers: [...DEFAULT_SUPPLIERS],
   activeProjectName: 'New Project',
   activeProjectDescription: '',
   activeParts: [],
@@ -434,6 +502,110 @@ function invalidatePlanForPartsChange(state: {
   };
 }
 
+function nestRootTagId(tag: string) {
+  return (tag || '').replace(
+    /(?:-OP\d+-(?:REM|EDGE|OFFCUT|WASTE|PART|ASIDE|STRIP))+$/gi,
+    ''
+  );
+}
+
+/** True when a cutting plan still points at this lot (by id, tag, or nest root). */
+function planReferencesBoard(
+  plan: SavedCuttingPlan | null | undefined,
+  board: Pick<Board, 'id' | 'tagId'>
+): boolean {
+  if (!plan) return false;
+  const boardTag = board.tagId || '';
+  const boardRoot = nestRootTagId(boardTag);
+  const candidates = new Set<string>();
+  for (const t of plan.usedBoardTags || []) {
+    if (t) {
+      candidates.add(t);
+      candidates.add(nestRootTagId(t));
+    }
+  }
+  for (const p of plan.placements || []) {
+    const t = p.boardTag || '';
+    if (t) {
+      candidates.add(t);
+      candidates.add(nestRootTagId(t));
+    }
+  }
+  if (candidates.has(board.id) || candidates.has(boardTag) || candidates.has(boardRoot)) {
+    return true;
+  }
+  for (const t of candidates) {
+    if (
+      t === boardTag ||
+      t === boardRoot ||
+      (boardTag && (t.startsWith(`${boardTag}-`) || boardTag.startsWith(`${t}-`))) ||
+      (boardRoot && (t.startsWith(`${boardRoot}-`) || boardRoot.startsWith(`${t}-`)))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * After stock is deleted, drop any nest that still lists those lots as allocated
+ * so Projects & Cuts cannot treat missing boards as available.
+ */
+function invalidatePlansForDeletedBoards(
+  state: {
+    activeProjectName: string;
+    activeCuttingPlan: SavedCuttingPlan | null;
+    completedOperations: string[];
+    savedProjects: SavedProject[];
+    cutHistory: CutHistoryEntry[];
+    cloudRevision: number;
+  },
+  removed: Pick<Board, 'id' | 'tagId'>[]
+) {
+  if (removed.length === 0) {
+    return {
+      activeCuttingPlan: state.activeCuttingPlan,
+      completedOperations: state.completedOperations,
+      savedProjects: state.savedProjects,
+      cutHistory: state.cutHistory,
+      cloudRevision: state.cloudRevision,
+    };
+  }
+
+  let activeCuttingPlan = state.activeCuttingPlan;
+  let completedOperations = state.completedOperations;
+  let cutHistory = state.cutHistory;
+  let cloudRevision = state.cloudRevision;
+  let savedProjects = state.savedProjects;
+
+  const activeHit = removed.some((b) => planReferencesBoard(activeCuttingPlan, b));
+  if (activeHit) {
+    const cleared = invalidatePlanForPartsChange(state);
+    activeCuttingPlan = cleared.activeCuttingPlan;
+    completedOperations = cleared.completedOperations;
+    savedProjects = cleared.savedProjects;
+    cutHistory = [];
+    cloudRevision = cleared.cloudRevision;
+  }
+
+  savedProjects = savedProjects.map((proj) => {
+    if (!removed.some((b) => planReferencesBoard(proj.cuttingPlan, b))) return proj;
+    return {
+      ...proj,
+      cuttingPlan: undefined,
+      completedCutOps: [],
+    };
+  });
+
+  return {
+    activeCuttingPlan,
+    completedOperations,
+    savedProjects,
+    cutHistory,
+    cloudRevision,
+  };
+}
+
 export const useAppStore = create<AppState>()((set, get) => ({
   ...FRESH_STATE,
   cloudUserId: null,
@@ -459,6 +631,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const activeMatch = savedProjects.find(
       (p) => projectNameKey(p.name) === projectNameKey(data.activeProjectName || '')
     );
+    const suppliers = normalizeSuppliers([
+      ...(Array.isArray(data.suppliers) ? data.suppliers : []),
+      ...readStoredSuppliers(),
+    ]);
+    writeStoredSuppliers(suppliers);
     set({
       ...data,
       savedProjects,
@@ -468,6 +645,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         data.lumberTypes,
         (data.boards || []).map((b) => b.species)
       ),
+      suppliers: suppliers.length ? suppliers : [...DEFAULT_SUPPLIERS],
       defaultKerfMm: data.defaultKerfMm ?? DEFAULT_KERF_MM,
       activeKerfMm: data.activeKerfMm ?? data.defaultKerfMm ?? DEFAULT_KERF_MM,
       activeCuttingPlan: data.activeCuttingPlan ?? null,
@@ -481,6 +659,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   clearWorkshopMemory: () =>
     set({
       ...FRESH_STATE,
+      suppliers: readStoredSuppliers(),
       cloudUserId: null,
       cloudReady: false,
       cloudSaving: false,
@@ -517,13 +696,37 @@ export const useAppStore = create<AppState>()((set, get) => ({
     })),
 
   removeBoard: (id) =>
-    set((state) => ({
-      boards: state.boards.filter((b) => b.id !== id),
-      pendingDeletedBoardIds: state.pendingDeletedBoardIds.includes(id)
+    set((state) => {
+      const removed = state.boards.filter((b) => b.id === id);
+      if (removed.length === 0) return state;
+      const pending = state.pendingDeletedBoardIds.includes(id)
         ? state.pendingDeletedBoardIds
-        : [...state.pendingDeletedBoardIds, id],
-      cloudRevision: state.cloudRevision + 1,
-    })),
+        : [...state.pendingDeletedBoardIds, id];
+      const invalidated = invalidatePlansForDeletedBoards(state, removed);
+      return {
+        boards: state.boards.filter((b) => b.id !== id),
+        pendingDeletedBoardIds: pending,
+        ...invalidated,
+        cloudRevision: Math.max(state.cloudRevision + 1, invalidated.cloudRevision),
+      };
+    }),
+
+  removeBoards: (ids) =>
+    set((state) => {
+      const idSet = new Set(ids.filter(Boolean));
+      if (idSet.size === 0) return state;
+      const removed = state.boards.filter((b) => idSet.has(b.id));
+      if (removed.length === 0) return state;
+      const pending = new Set(state.pendingDeletedBoardIds);
+      for (const id of idSet) pending.add(id);
+      const invalidated = invalidatePlansForDeletedBoards(state, removed);
+      return {
+        boards: state.boards.filter((b) => !idSet.has(b.id)),
+        pendingDeletedBoardIds: Array.from(pending),
+        ...invalidated,
+        cloudRevision: Math.max(state.cloudRevision + 1, invalidated.cloudRevision),
+      };
+    }),
 
   updateBoard: (board) =>
     set((state) => ({
@@ -542,6 +745,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
       lumberTypes: normalizeLumberTypes(types),
       cloudRevision: state.cloudRevision + 1,
     })),
+
+  updateSuppliers: (suppliers) =>
+    set((state) => {
+      const next = normalizeSuppliers(suppliers);
+      writeStoredSuppliers(next);
+      return {
+        suppliers: next.length ? next : [...DEFAULT_SUPPLIERS],
+        cloudRevision: state.cloudRevision + 1,
+      };
+    }),
 
   renameLumberType: (from, to) => {
     const oldName = String(from || '').trim();
@@ -617,14 +830,18 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set((state) => {
       if (state.completedOperations.includes(opKey)) return state;
 
-      const takeFromLotTag = options?.takeFromLotTag;
+      const takeFromLotTags = [
+        ...(options?.takeFromLotTag ? [options.takeFromLotTag] : []),
+        ...(options?.takeFromLotTags || []),
+      ].filter(Boolean);
       const consumeExactTags = new Set(options?.consumeExactTags || []);
       const restorations: CutHistoryEntry['restorations'] = [];
+      const restoredIds = new Set<string>();
 
-      const findLot = (tag: string) => {
+      const findLot = (tag: string, boards: Board[]) => {
         const baseTag = tag.replace(/-\d+$/, '');
         return (
-          state.boards.find(
+          boards.find(
             (b) =>
               b.tagId === tag ||
               b.id === tag ||
@@ -635,12 +852,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
         );
       };
 
-      const updatedBoards = state.boards.map((b) => {
-        let next = b;
+      let updatedBoards = [...state.boards];
 
-        if (takeFromLotTag) {
-          const lot = findLot(takeFromLotTag);
-          if (lot && b.id === lot.id) {
+      for (const pullTag of takeFromLotTags) {
+        const lot = findLot(pullTag, updatedBoards);
+        if (!lot) continue;
+        updatedBoards = updatedBoards.map((b) => {
+          if (b.id !== lot.id) return b;
+          if (!restoredIds.has(b.id)) {
             restorations.push({
               boardId: b.id,
               boardTag: b.tagId,
@@ -648,34 +867,39 @@ export const useAppStore = create<AppState>()((set, get) => ({
               prevQuantity: b.quantity || 1,
               prevUnitsIssued: b.unitsIssued || 0,
             });
-            const qty = Math.max(1, b.quantity || 1);
-            const inferred = resolveUnitsIssued(b, state.boards);
-            const unitMatch = takeFromLotTag.match(
-              new RegExp(`^${escapeTag(b.tagId)}-(\\d+)(?:$|-)`)
-            );
-            const takenUnit = unitMatch ? Number(unitMatch[1]) : inferred + 1;
-            const nextIssued = Math.max(inferred, takenUnit);
-            next =
-              qty > 1
-                ? { ...b, quantity: qty - 1, status: 'active', unitsIssued: nextIssued }
-                : { ...b, status: 'consumed', quantity: 0, unitsIssued: nextIssued };
+            restoredIds.add(b.id);
           }
-        }
+          const qty = Math.max(1, b.quantity || 1);
+          const inferred = resolveUnitsIssued(b, state.boards);
+          const unitMatch = pullTag.match(
+            new RegExp(`^${escapeTag(b.tagId)}-(\\d+)(?:$|-)`)
+          );
+          const takenUnit = unitMatch ? Number(unitMatch[1]) : inferred + 1;
+          const nextIssued = Math.max(inferred, takenUnit);
+          return qty > 1
+            ? { ...b, quantity: qty - 1, status: 'active' as BoardStatus, unitsIssued: nextIssued }
+            : {
+                ...b,
+                status: 'consumed' as BoardStatus,
+                quantity: 0,
+                unitsIssued: nextIssued,
+              };
+        });
+      }
 
-        if (consumeExactTags.has(b.tagId)) {
-          if (!restorations.some((r) => r.boardId === b.id)) {
-            restorations.push({
-              boardId: b.id,
-              boardTag: b.tagId,
-              prevStatus: b.status,
-              prevQuantity: b.quantity || 1,
-              prevUnitsIssued: b.unitsIssued || 0,
-            });
-          }
-          next = { ...next, status: 'consumed' };
+      updatedBoards = updatedBoards.map((b) => {
+        if (!consumeExactTags.has(b.tagId) && !consumeExactTags.has(b.id)) return b;
+        if (!restoredIds.has(b.id)) {
+          restorations.push({
+            boardId: b.id,
+            boardTag: b.tagId,
+            prevStatus: b.status,
+            prevQuantity: b.quantity || 1,
+            prevUnitsIssued: b.unitsIssued || 0,
+          });
+          restoredIds.add(b.id);
         }
-
-        return next;
+        return { ...b, status: 'consumed' as BoardStatus, quantity: 0 };
       });
 
       const historyEntry: CutHistoryEntry = {
@@ -907,9 +1131,63 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   clearActiveCuttingPlan: () =>
-    set((state) => ({
-      ...invalidatePlanForPartsChange(state),
-    })),
+    set((state) => {
+      const lamTags = new Set(
+        (state.activeCuttingPlan?.laminations || []).flatMap((l) => l.boardTags || [])
+      );
+      const boards =
+        lamTags.size === 0
+          ? state.boards
+          : state.boards.map((b) =>
+              lamTags.has(b.tagId) && b.status === 'allocated'
+                ? { ...b, status: 'active' as BoardStatus }
+                : b
+            );
+      return {
+        ...invalidatePlanForPartsChange({ ...state, boards }),
+        boards,
+      };
+    }),
+
+  allocateStockByTags: (tags) =>
+    set((state) => {
+      const want = new Set(tags.filter(Boolean));
+      if (want.size === 0) return state;
+      const match = (b: Board) =>
+        want.has(b.tagId) ||
+        want.has(b.id) ||
+        [...want].some(
+          (t) =>
+            t.startsWith(`${b.id}#`) ||
+            (t.startsWith(`${b.tagId}-`) && !t.includes('-OP'))
+        );
+      return {
+        boards: state.boards.map((b) =>
+          match(b) && b.status === 'active' ? { ...b, status: 'allocated' as BoardStatus } : b
+        ),
+        cloudRevision: state.cloudRevision + 1,
+      };
+    }),
+
+  releaseAllocatedByTags: (tags) =>
+    set((state) => {
+      const want = new Set(tags.filter(Boolean));
+      if (want.size === 0) return state;
+      const match = (b: Board) =>
+        want.has(b.tagId) ||
+        want.has(b.id) ||
+        [...want].some(
+          (t) =>
+            t.startsWith(`${b.id}#`) ||
+            (t.startsWith(`${b.tagId}-`) && !t.includes('-OP'))
+        );
+      return {
+        boards: state.boards.map((b) =>
+          match(b) && b.status === 'allocated' ? { ...b, status: 'active' as BoardStatus } : b
+        ),
+        cloudRevision: state.cloudRevision + 1,
+      };
+    }),
 
   saveCurrentProject: () => {
     const {

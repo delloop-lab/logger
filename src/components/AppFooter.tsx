@@ -29,7 +29,7 @@ export default function AppFooter() {
   return (
     <>
       <footer className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-gray-800 bg-[#1a1d22]/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 py-2.5 text-[11px] text-gray-400 md:px-8">
+        <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 py-2.5 text-[11px] text-gray-400 sm:px-6 lg:px-10">
           <p className="m-0">Copyright (c) {new Date().getFullYear()} The Novita Group Pty Ltd</p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <button

@@ -1,7 +1,7 @@
 # Logger Help Guide
 
-**Version:** BETA V.09.560  
-**Publisher:** Lou Schillaci
+**Version:** BETA V.09.790  
+**Publisher:** The Novita Group Pty Ltd
 
 > **BETA notice:** Logger is a **BETA** product. Features, screens, and workflows are updated frequently. Expect changes between sessions; report issues via **Contact** in the app footer.
 
@@ -34,6 +34,7 @@ Open **Settings** before logging the first board so kerf and offcut rules stay p
 - **Default saw kerf:** Your usual table or miter saw blade width (for example 3 mm or 0.125 in). New projects pick this up; you can still override kerf on a single project.
 - **Minimum reusable offcut size:** Length and width thresholds (for example 100 × 100 mm). Pieces at or above this return to inventory as offcuts; smaller scraps are treated as waste.
 - **Timber species:** Add or rename lumber types in Settings (for example Birch Plywood or Jarrah). These appear in Quick Log and Projects & Cuts when you pick wood species.
+- **Suppliers:** Maintain the list used by Quick Log when source is New or Purchased (you can still pick Other… while logging).
 - **Storage locations:** Add racks, bins, shed shelves, and benches that match your shop so Quick Log can tag where each lot sits.
 
 ### Step 2: Log your first inventory
@@ -43,11 +44,11 @@ Take a tape to the rack or offcut bin and log a few boards in **Quick Log** (3 t
 - **Dimensions:** Length × Width × Thickness in your chosen units, plus quantity for identical boards in one lot.
 - **Species / material:** Pick from your lumber types in Settings (defaults include Pine / Pallet, Walnut, European Oak, and more). Logger assigns a lot tag id from the species prefix.
 - **Source:** New, pallet, salvaged, cut-off, furniture teardown, offcut bin, or purchased.
-- **Description or Supplier (optional):** Beside storage location. Salvaged or Furniture Teardown opens **Description** (e.g. bedhead, stool leg). New or Purchased opens **Supplier** (e.g. timber yard).
+- **Description or Supplier (optional):** Beside storage location. Salvaged or Furniture Teardown opens **Description** (e.g. bedhead, stool leg). New or Purchased opens **Supplier** — pick from Settings or **Other…**.
 - **Defects & condition:** Flag warp, knots, checks, live edge, waney edges, nail or screw holes, and similar. Optional defect notes travel onto pull tags when that lot is used.
 - **Storage location:** Choose the rack or bin so you can find the board later from Inventory or a QR scan.
 
-After saving, review lots under **Inventory**. Print a Stock Tag (**System Print** or **Save PNG**) if you want rack labels you can scan later.
+Quick Log stays open after each save so you can add several lots. Review them under **Inventory**. Print a Stock Tag (**System Print** or **Save PNG**) if you want rack labels you can scan later.
 
 ### Step 3: Create a project and parts list
 
@@ -60,9 +61,9 @@ Open **Projects & Cuts** to set up a build and see the yield engine work against
 
 ### Step 4: Run the cut list and nesting engine
 
-1. Click **Generate instructions** (shown with how many boards the plan needs).
-2. Review the visual cut sheets: rip and crosscut passes aimed at higher yield and less waste. Confirm each cut as you work the board.
-3. When cuts are applied, usable remnants at or above your minimum offcut size return to inventory; true scrap is retired. Finished pieces show as staged until you mark them installed.
+1. Click **Generate instructions**. If stock does not fit, **stock check** explains each part (required vs on hand) and lets you face-laminate thin solid timber, acknowledge planing thicker solid stock, skip a part, pause to buy stock, or generate what already fits. Sheet goods must match thickness exactly — planing plywood is not suggested. Logger does not substitute a different species.
+2. Review the visual cut sheets: rip and crosscut passes aimed at higher yield and less waste. Laminate layers show as reserved stock — glue and plane before cutting, then re-log leftovers in Quick Log when prompted.
+3. Confirm cuts one at a time or **mark all remaining** complete. Usable remnants at or above your minimum offcut size return to inventory; true scrap is retired. Finished pieces show as staged until you mark them installed.
 
 ### What to try next
 
@@ -80,17 +81,17 @@ Your workshop home screen. Shows how much timber is available (piece count and f
 ![Dashboard tab](public/help/help-tab-dashboard.png)
 
 ### Quick Log
-Fast way to add new timber to stock. Choose species from your lumber types, set source, storage location, dimensions, and quantity. Source opens an optional field beside location: **Description** (for Salvaged or Furniture Teardown, e.g. bedhead or stool leg) or **Supplier** (for New or Purchased). Optionally mark defects (warp, knot, split, and so on) plus defect notes. Logger assigns a lot tag id automatically (based on species). After you save, the lot appears in Inventory and on the Dashboard.
+Fast way to add new timber to stock. Choose species from your lumber types, set source, storage location, dimensions, and quantity. Source opens an optional field beside location: **Description** (for Salvaged or Furniture Teardown) or **Supplier** (for New or Purchased — Settings list or **Other…**). Optionally mark defects plus defect notes. Logger assigns a lot tag id automatically. The form stays open after each save so you can log several lots; each appears in Inventory and on the Dashboard.
 
 ![Quick Log tab](public/help/help-tab-quick-log.png)
 
 ### Inventory
-Full catalogue of every lot: raw stock, reusable offcuts, waste remnants, and finished parts. Filter by status (available, staged, consumed), type (stock / offcuts / finished), species, or project. Sort columns, edit dimensions and location, delete lots, mark finished pieces installed, and open **Print label** for QR tags (system print or save as image).
+Full catalogue of every lot: raw stock, reusable offcuts, waste remnants, and finished parts. Filter by status (available, staged, consumed), type (stock / offcuts / finished), species, or project. Sort columns, edit dimensions and location, select several lots to delete or print together, mark finished pieces installed, and open **Print label** for QR tags. Deleting stock that a cut plan still uses invalidates that plan so you regenerate from what is left.
 
 ![Inventory tab](public/help/help-tab-inventory.png)
 
 ### Projects & Cuts
-Plan a build end to end. Name or open a project, add parts (name, species from your lumber types, size, quantity), set kerf and cutting strategy, then generate nested cutting sheets against available boards. Review shop drawings, save or pause projects when stock is short, resume later, and apply cuts so remnants / finished parts update Inventory.
+Plan a build end to end. Name or open a project, add parts (name, species from your lumber types, size, quantity), set kerf and cutting strategy, then generate nested cutting sheets. A **stock check** flags mismatches before sheets open (missing species, too thin / too thick, sheet-goods thickness). Solid timber can use face-laminate or planing acknowledgments; plywood is never suggested for planing. Confirm cuts one at a time or mark all remaining. Save or pause when stock is short, then resume later.
 
 ![Projects & Cuts tab](public/help/help-tab-projects-cuts.png)
 
@@ -105,11 +106,9 @@ Find a board at the rack without typing. Start the camera (or upload a photo of 
 ![QR Scanner tab](public/help/help-tab-qr-scanner.png)
 
 ### Settings
-Workshop preferences: metric (mm) or imperial (inches), default saw kerf for new projects, minimum size that counts as a reusable offcut, lumber types (add or rename species such as Birch Plywood or Jarrah), and your list of storage locations (rack, workbench, shed, and so on). Also shows who is signed in and tools to reset workshop data if you need a clean start.
+Workshop preferences: metric (mm) or imperial (inches), default saw kerf for new projects, minimum reusable offcut size, lumber types (add or rename), **suppliers** (Quick Log dropdown), storage locations, workshop backups, and tools to reset workshop data if you need a clean start.
 
 ![Settings tab](public/help/help-tab-settings.png)
-
-*(Settings screenshot shows kerf, offcut rules, and lumber types.)*
 
 ---
 
@@ -138,8 +137,9 @@ Printed tags encode the board tag id so the **QR Scanner** can find the lot agai
 
 ## Tips
 
-- Keep locations and lumber type names consistent (Settings ↔ Quick Log) so filters stay useful.
+- Keep locations, lumber types, and suppliers consistent (Settings ↔ Quick Log) so filters stay useful.
 - Use Description on salvaged / teardown stock and Supplier on new / purchased stock so you remember what each lot is.
+- After laminating and cutting, re-log any leftover blank in Quick Log — old layer tags are consumed.
 - Log reusable offcuts after a cut so the matcher and cut planner can reuse them.
 - Print QR labels from Inventory so the QR Scanner can find lots at the rack.
 
@@ -160,19 +160,27 @@ Either. Switch in **Settings**; dimensions convert for display while stock is st
 Yes. In **Settings**, add or rename types such as Birch Plywood or Jarrah. They appear in Quick Log and Projects & Cuts.
 
 **What are Description and Supplier on Quick Log?**  
-Optional fields beside Storage Location. **Salvaged** or **Furniture Teardown** shows **Description** (what the piece was). **New** or **Purchased** shows **Supplier** (where you bought it).
+Optional fields beside Storage Location. **Salvaged** or **Furniture Teardown** shows **Description**. **New** or **Purchased** shows **Supplier** (Settings list or **Other…**). Quick Log stays open after each save.
+
+**What happens if stock is the wrong thickness for a part?**  
+Stock check shows the part, the gap, and actions. Too thin (solid): laminate or skip. Too thick (solid): acknowledge planing or skip. Sheet goods must match thickness exactly. You can also pause or generate what already fits.
+
+**If I laminate, what happens to those boards?**  
+Layers are reserved on the plan, then consumed when you confirm the finished cut. Re-log any leftover laminated stock in Quick Log with measured dimensions.
+
+**Will Logger use a different species if mine is missing?**  
+No. Log the right timber, skip that part, or pause the project.
 
 **What does “consumed” mean?**  
 The lot is no longer available as pullable stock (used up or installed finished work, depending on classification).
 
 **Where do I get help or report a problem?**  
-Use **Contact** in the footer (`lou@schillaci.me`), or open **Help** / **Getting started** in the footer for the in-app guides.
+Use **Contact** in the footer (`loggerhelp@novitagroup.com`), or open **Help** / **Getting started** in the footer for the in-app guides.
 
 ---
 
 ## Contact
 
-Lou Schillaci  
-Email: [lou@schillaci.me](mailto:lou@schillaci.me)
+Email: [loggerhelp@novitagroup.com](mailto:loggerhelp@novitagroup.com)
 
-Copyright (c) 2026 Lou Schillaci
+Copyright (c) 2026 The Novita Group Pty Ltd

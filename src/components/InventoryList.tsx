@@ -75,7 +75,8 @@ export default function InventoryList() {
   const boards = store?.boards || [];
   const savedProjects = store?.savedProjects || [];
   const removeBoard = store?.removeBoard || (() => {});
-  const addBoard = store?.addBoard || (() => {});
+  const removeBoards = store?.removeBoards || ((ids: string[]) => ids.forEach((id) => removeBoard(id)));
+  const updateBoard = store?.updateBoard || (() => {});
   const markBoardsInstalled = store?.markBoardsInstalled || (() => 0);
   const markProjectCompleted = store?.markProjectCompleted;
   const unitSystem = store.unitSystem;
@@ -90,7 +91,8 @@ export default function InventoryList() {
   ]).filter((loc) => loc && loc.trim() !== '');
 
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
-  const [labelBoard, setLabelBoard] = useState<Board | null>(null);
+  const [labelBoards, setLabelBoards] = useState<Board[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [sortField, setSortField] = useState<SortField>('tagId');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('available');
@@ -176,6 +178,33 @@ export default function InventoryList() {
     return 0;
   });
 
+  const visibleIds = uniqueBoards.map((b) => b.id);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
+  const selectedCount = selectedIds.size;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const id of visibleIds) next.delete(id);
+      } else {
+        for (const id of visibleIds) next.add(id);
+      }
+      return next;
+    });
+  };
+
   const handleDelete = async (id: string, tagId: string) => {
     const ok = await notify.confirm({
       title: 'Remove board from inventory?',
@@ -185,7 +214,39 @@ export default function InventoryList() {
     });
     if (!ok) return;
     removeBoard(id);
+    setSelectedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     toast.error(`Removed board ${tagId} from inventory.`);
+  };
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const tagPreview = boards
+      .filter((b) => selectedIds.has(b.id))
+      .map((b) => b.tagId)
+      .slice(0, 5);
+    const more = ids.length - tagPreview.length;
+    const ok = await notify.confirm({
+      title: `Remove ${ids.length} lot${ids.length === 1 ? '' : 's'} from inventory?`,
+      message: `Remove ${tagPreview.join(', ')}${
+        more > 0 ? ` and ${more} more` : ''
+      }? This cannot be undone.`,
+      confirmLabel: ids.length === 1 ? 'Remove' : `Remove ${ids.length}`,
+      danger: true,
+    });
+    if (!ok) return;
+    removeBoards(ids);
+    setSelectedIds(new Set());
+    toast.error(
+      ids.length === 1
+        ? `Removed board ${tagPreview[0] || ids[0]} from inventory.`
+        : `Removed ${ids.length} lots from inventory.`
+    );
   };
 
   /** Finished part leaves Available when installed into the completed project build. */
@@ -227,8 +288,7 @@ export default function InventoryList() {
     e.preventDefault();
     if (!editingBoard) return;
 
-    removeBoard(editingBoard.id);
-    addBoard(editingBoard);
+    updateBoard(editingBoard);
     setEditingBoard(null);
     toast.success(`Updated board ${editingBoard.tagId}!`);
   };
@@ -377,6 +437,37 @@ export default function InventoryList() {
               Complete build, {projectFilter}, {stagedForProject.length}
             </button>
           )}
+
+          {selectedCount > 0 && (
+            <>
+              <button
+                type="button"
+                data-allow-demo
+                onClick={() => {
+                  const selected = boards.filter((b) => selectedIds.has(b.id));
+                  if (selected.length === 0) {
+                    toast.error('No selected lots found to print.');
+                    return;
+                  }
+                  setLabelBoards(selected);
+                }}
+                className="inline-flex items-center gap-1.5 bg-sky-950/50 hover:bg-sky-900/50 border border-sky-700/60 text-sky-300 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+                title="Print QR labels for selected lots"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print selected ({selectedCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteSelected()}
+                className="inline-flex items-center gap-1.5 bg-red-950/50 hover:bg-red-900/50 border border-red-700/60 text-red-300 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+                title="Remove selected lots from inventory"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete selected ({selectedCount})
+              </button>
+            </>
+          )}
       </div>
 
       {uniqueBoards.length === 0 ? (
@@ -388,6 +479,19 @@ export default function InventoryList() {
           <table className="w-full text-left text-xs text-gray-300">
             <thead className="bg-[#121417] text-gray-400 uppercase font-mono text-[10px] tracking-wider border-b border-gray-800">
               <tr>
+                <th className="p-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
+                    }}
+                    onChange={toggleSelectAllVisible}
+                    className="accent-orange-500 cursor-pointer"
+                    title={allVisibleSelected ? 'Deselect all visible' : 'Select all visible'}
+                    aria-label={allVisibleSelected ? 'Deselect all visible' : 'Select all visible'}
+                  />
+                </th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('tagId')}>Tag ID</th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('originProject')}>Project</th>
                 <th className="p-3 cursor-pointer hover:text-white" onClick={() => toggleSort('species')}>Species</th>
@@ -403,8 +507,23 @@ export default function InventoryList() {
             <tbody className="divide-y divide-gray-800 font-mono">
               {uniqueBoards.map((b) => {
                 const defectLabel = formatDefectsList(b.defects, b.defectNotes);
+                const selected = selectedIds.has(b.id);
                 return (
-                <tr key={b.id} className="hover:bg-[#121417]/50 transition-all">
+                <tr
+                  key={b.id}
+                  className={`hover:bg-[#121417]/50 transition-all ${
+                    selected ? 'bg-orange-950/20' : ''
+                  }`}
+                >
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleSelect(b.id)}
+                      className="accent-orange-500 cursor-pointer"
+                      aria-label={`Select ${b.tagId}`}
+                    />
+                  </td>
                   <td className="p-3 font-bold text-orange-400 flex items-center gap-1.5 font-sans">
                     <Tag className="w-3.5 h-3.5 text-orange-500" /> {b.tagId}
                   </td>
@@ -467,7 +586,7 @@ export default function InventoryList() {
                     <button
                       type="button"
                       data-allow-demo
-                      onClick={() => setLabelBoard(b)}
+                      onClick={() => setLabelBoards([b])}
                       className="text-sky-400 hover:text-sky-300 p-1.5 rounded-lg hover:bg-sky-950/40 transition-all inline-block cursor-pointer"
                       title="Print QR label"
                     >
@@ -501,21 +620,20 @@ export default function InventoryList() {
         onClose={() => setEditingBoard(null)}
         title={editingBoard ? `Edit board (${editingBoard.tagId})` : 'Edit board'}
         subtitle="Same fields as Quick Log"
-        size="lg"
+        size="xl"
       >
         {editingBoard && (
           <form onSubmit={handleSaveEdit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Tag ID</label>
-              <input
-                type="text"
-                value={editingBoard.tagId}
-                onChange={(e) => setEditingBoard({ ...editingBoard, tagId: e.target.value })}
-                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Tag ID</label>
+                <input
+                  type="text"
+                  value={editingBoard.tagId}
+                  onChange={(e) => setEditingBoard({ ...editingBoard, tagId: e.target.value })}
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-orange-500"
+                />
+              </div>
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">Wood Species</label>
                 <SpeciesSelect
@@ -552,16 +670,6 @@ export default function InventoryList() {
                   ))}
                 </select>
               </div>
-            </div>
-
-            <div
-              className={`grid grid-cols-1 gap-4 ${
-                showDescriptionForSource(editingBoard.source) ||
-                showSupplierForSource(editingBoard.source)
-                  ? 'md:grid-cols-2'
-                  : ''
-              }`}
-            >
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">
                   Storage Location
@@ -585,47 +693,53 @@ export default function InventoryList() {
                   ))}
                 </select>
               </div>
-              {showDescriptionForSource(editingBoard.source) && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">
-                    Description <span className="font-normal text-gray-500">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={editingBoard.notes || ''}
-                    onChange={(e) =>
-                      setEditingBoard({
-                        ...editingBoard,
-                        notes: e.target.value.trim() ? e.target.value : undefined,
-                      })
-                    }
-                    placeholder="e.g. bedhead, stool leg"
-                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-              )}
-              {showSupplierForSource(editingBoard.source) && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">
-                    Supplier <span className="font-normal text-gray-500">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={editingBoard.notes || ''}
-                    onChange={(e) =>
-                      setEditingBoard({
-                        ...editingBoard,
-                        notes: e.target.value.trim() ? e.target.value : undefined,
-                      })
-                    }
-                    placeholder="e.g. Bunnings, local timber yard"
-                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-              )}
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            {(showDescriptionForSource(editingBoard.source) ||
+              showSupplierForSource(editingBoard.source)) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {showDescriptionForSource(editingBoard.source) && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                      Description <span className="font-normal text-gray-500">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBoard.notes || ''}
+                      onChange={(e) =>
+                        setEditingBoard({
+                          ...editingBoard,
+                          notes: e.target.value.trim() ? e.target.value : undefined,
+                        })
+                      }
+                      placeholder="e.g. bedhead, stool leg"
+                      className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                )}
+                {showSupplierForSource(editingBoard.source) && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                      Supplier <span className="font-normal text-gray-500">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editingBoard.notes || ''}
+                      onChange={(e) =>
+                        setEditingBoard({
+                          ...editingBoard,
+                          notes: e.target.value.trim() ? e.target.value : undefined,
+                        })
+                      }
+                      placeholder="e.g. Bunnings, local timber yard"
+                      className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">Length ({u})</label>
                 <input
@@ -685,31 +799,28 @@ export default function InventoryList() {
                   className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">
-                Quantity in this lot
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={editingBoard.quantity || 1}
-                onChange={(e) =>
-                  setEditingBoard({
-                    ...editingBoard,
-                    quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
-                  })
-                }
-                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
-              />
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Qty in lot</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editingBoard.quantity || 1}
+                  onChange={(e) =>
+                    setEditingBoard({
+                      ...editingBoard,
+                      quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
+                    })
+                  }
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
+                />
+              </div>
             </div>
 
             <div className="space-y-2 rounded-xl border border-amber-800/40 bg-amber-950/20 p-3.5">
               <label className="flex items-center gap-2 text-xs font-medium text-amber-300">
                 <AlertTriangle className="w-3.5 h-3.5" /> Defects on this stock
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
                 {DEFECT_OPTIONS.map((d) => {
                   const checked = (editingBoard.defects || []).includes(d);
                   return (
@@ -778,9 +889,9 @@ export default function InventoryList() {
       </AppModal>
 
       <BoardLabelPrint
-        board={labelBoard}
+        boards={labelBoards}
         unitSystem={unitSystem}
-        onClose={() => setLabelBoard(null)}
+        onClose={() => setLabelBoards([])}
       />
     </div>
   );

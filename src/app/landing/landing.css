@@ -100,6 +100,18 @@ body > div.tv-landing:first-child {
   background: color-mix(in srgb, var(--tv-primary) 90%, black);
 }
 
+/* High-contrast amber CTA — pops on wood/bark backgrounds */
+.tv-landing .btn-cta {
+  background: #d97706;
+  color: #ffffff;
+  box-shadow: 0 8px 24px color-mix(in srgb, #d97706 35%, transparent);
+}
+
+.tv-landing .btn-cta:hover {
+  background: #f59e0b;
+  color: #ffffff;
+}
+
 .tv-landing .btn-ghost {
   border: 1px solid color-mix(in srgb, var(--tv-bark-foreground) 40%, transparent);
   color: var(--tv-bark-foreground);

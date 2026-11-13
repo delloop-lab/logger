@@ -73,6 +73,12 @@ describe('speciesMatches', () => {
     expect(speciesMatches('Any wood', 'Walnut')).toBe(true);
     expect(speciesMatches('Walnut', 'Pine')).toBe(false);
   });
+
+  it('does not substitute a different species when matching stock is missing', () => {
+    expect(speciesMatches('Jarrah', 'Pine')).toBe(false);
+    expect(speciesMatches('Birch', 'Birch Plywood')).toBe(false);
+    expect(speciesMatches('Birch Plywood', 'Oak Plywood')).toBe(false);
+  });
 });
 
 describe('board rejection', () => {

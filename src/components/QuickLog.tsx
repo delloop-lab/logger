@@ -30,12 +30,16 @@ export default function QuickLog({ onLogged }: Props) {
   const [location, setLocation] = useState(activeLocations[0] || 'Workbench');
   const [description, setDescription] = useState('');
   const [supplier, setSupplier] = useState('');
+  const [supplierOther, setSupplierOther] = useState('');
   const [length, setLength] = useState('');
   const [width, setWidth] = useState('');
   const [thickness, setThickness] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [defects, setDefects] = useState<DefectType[]>([]);
   const [defectNotes, setDefectNotes] = useState('');
+  const suppliers = useAppStore((s) => s.suppliers);
+  const updateSuppliers = useAppStore((s) => s.updateSuppliers);
+  const supplierOptions = suppliers?.length ? suppliers : ['Bunnings', 'Local timber yard'];
 
   const toggleDefect = (d: DefectType) => {
     setDefects((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
@@ -86,10 +90,24 @@ export default function QuickLog({ onLogged }: Props) {
     const showDescription =
       source === 'Salvaged' || source === 'Furniture Teardown';
     const showSupplier = source === 'New' || source === 'Purchased';
+    const resolvedSupplier =
+      supplier === '__other__' ? supplierOther.trim() : supplier.trim();
+    if (showSupplier && supplier === '__other__' && !resolvedSupplier) {
+      toast.error('Enter a supplier name for Other, or pick one from the list.');
+      return;
+    }
+    if (
+      showSupplier &&
+      supplier === '__other__' &&
+      resolvedSupplier &&
+      !supplierOptions.some((s) => s.toLowerCase() === resolvedSupplier.toLowerCase())
+    ) {
+      updateSuppliers([...supplierOptions, resolvedSupplier]);
+    }
     const notes = showDescription
       ? description.trim() || undefined
       : showSupplier
-        ? supplier.trim() || undefined
+        ? resolvedSupplier || undefined
         : undefined;
 
     addBoard({
@@ -111,18 +129,22 @@ export default function QuickLog({ onLogged }: Props) {
     setQuantity('1');
     setDescription('');
     setSupplier('');
+    setSupplierOther('');
     setDefects([]);
     setDefectNotes('');
     toast.success(
       qty === 1
-        ? `Logged lot ${tagId} (1 board).`
-        : `Logged lot ${tagId} (${qty} boards in one lot).`
+        ? `Logged lot ${tagId} (1 board). Stay here to add more.`
+        : `Logged lot ${tagId} (${qty} boards in one lot). Stay here to add more.`
     );
     onLogged?.();
   };
 
+  const showDescription = source === 'Salvaged' || source === 'Furniture Teardown';
+  const showSupplier = source === 'New' || source === 'Purchased';
+
   return (
-    <div className="bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-6 shadow-xl max-w-2xl mx-auto">
+    <div className="w-full bg-[#1e2228] border border-gray-800 p-6 rounded-2xl space-y-6 shadow-xl">
       <div>
         <h3 className="text-base font-bold text-white flex items-center gap-2">
           <PlusCircle className="w-5 h-5 text-orange-500" /> Quick Workshop Log
@@ -134,7 +156,7 @@ export default function QuickLog({ onLogged }: Props) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Wood Species</label>
             <SpeciesSelect value={species} onChange={setSpecies} />
@@ -155,19 +177,7 @@ export default function QuickLog({ onLogged }: Props) {
               <option value="Purchased">Purchased</option>
             </select>
           </div>
-        </div>
-
-        <div
-          className={`grid grid-cols-1 gap-4 ${
-            source === 'Salvaged' ||
-            source === 'Furniture Teardown' ||
-            source === 'New' ||
-            source === 'Purchased'
-              ? 'md:grid-cols-2'
-              : ''
-          }`}
-        >
-          <div>
+          <div className="md:col-span-2 lg:col-span-1">
             <label className="block text-xs font-medium text-gray-400 mb-1">Storage Location</label>
             <select
               value={location}
@@ -181,81 +191,107 @@ export default function QuickLog({ onLogged }: Props) {
               ))}
             </select>
           </div>
-          {(source === 'Salvaged' || source === 'Furniture Teardown') && (
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">
-                Description <span className="font-normal text-gray-500">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. bedhead, stool leg"
-                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-              />
-            </div>
-          )}
-          {(source === 'New' || source === 'Purchased') && (
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">
-                Supplier <span className="font-normal text-gray-500">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                placeholder="e.g. Bunnings, local timber yard"
-                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-              />
-            </div>
-          )}
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Length ({u})</label>
-            <input
-              type="number"
-              step="any"
-              value={length}
-              onChange={(e) => setLength(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
-            />
+        {(showDescription || showSupplier) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {showDescription && (
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Description <span className="font-normal text-gray-500">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="e.g. bedhead, stool leg"
+                  className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                />
+              </div>
+            )}
+            {showSupplier && (
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">
+                    Supplier <span className="font-normal text-gray-500">(optional)</span>
+                  </label>
+                  <select
+                    value={supplier}
+                    onChange={(e) => setSupplier(e.target.value)}
+                    className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500 font-semibold cursor-pointer"
+                  >
+                    <option value="">No supplier</option>
+                    {supplierOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                    <option value="__other__">Other…</option>
+                  </select>
+                </div>
+                {supplier === '__other__' && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                      Other supplier name
+                    </label>
+                    <input
+                      type="text"
+                      value={supplierOther}
+                      onChange={(e) => setSupplierOther(e.target.value)}
+                      placeholder="e.g. specialty hardwood yard"
+                      className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Width ({u})</label>
-            <input
-              type="number"
-              step="any"
-              value={width}
-              onChange={(e) => setWidth(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Thickness ({u})</label>
-            <input
-              type="number"
-              step="any"
-              value={thickness}
-              onChange={(e) => setThickness(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
-            />
-          </div>
-        </div>
+        )}
 
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">
-            Quantity in this lot
-          </label>
-          <input
-            type="number"
-            min="1"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
-          />
-          <p className="text-[10px] text-gray-500 mt-1">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Length ({u})</label>
+              <input
+                type="number"
+                step="any"
+                value={length}
+                onChange={(e) => setLength(e.target.value)}
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Width ({u})</label>
+              <input
+                type="number"
+                step="any"
+                value={width}
+                onChange={(e) => setWidth(e.target.value)}
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Thickness ({u})</label>
+              <input
+                type="number"
+                step="any"
+                value={thickness}
+                onChange={(e) => setThickness(e.target.value)}
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Qty in lot</label>
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono"
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-gray-500 mt-1.5">
             Same size / species / location stay as one lot with this quantity, not separate rows.
           </p>
         </div>
@@ -268,7 +304,7 @@ export default function QuickLog({ onLogged }: Props) {
             Tick anything to watch for when cutting or assembling. Shows on pull tags for every project
             that uses this lot.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
             {DEFECT_OPTIONS.map((d) => {
               const checked = defects.includes(d);
               return (

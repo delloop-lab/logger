@@ -62,7 +62,7 @@ const BASE_TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
 export default function Page() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [loginGateOpen, setLoginGateOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [gettingStartedOpen, setGettingStartedOpen] = useState(false);
@@ -112,7 +112,7 @@ export default function Page() {
       const wantsSignup = params.get('signup') === '1';
       const wantsLogin = params.get('login') === '1';
       if (!wantsSignup && !wantsLogin) return;
-      setAuthMode(wantsSignup ? 'signup' : 'signin');
+      setAuthMode(wantsSignup ? 'signup' : 'login');
       setAuthOpen(true);
       params.delete('signup');
       params.delete('login');
@@ -140,7 +140,7 @@ export default function Page() {
     }
   };
 
-  const openLogin = (mode: 'signin' | 'signup' = 'signin') => {
+  const openLogin = (mode: 'login' | 'signup' = 'login') => {
     setLoginGateOpen(false);
     setAuthMode(mode);
     setAuthOpen(true);
@@ -157,6 +157,8 @@ export default function Page() {
     if (target.closest('[data-login-trigger]')) return;
     if (target.closest('[data-login-gate]') || target.closest('[data-auth-modal]')) return;
     if (target.closest('[data-allow-demo]')) return;
+    // Logo / home link → landing page (do not trap in login gate)
+    if (target.closest('[data-home-link], a[href="/"]')) return;
     // Allow browsing header tabs / section nav only
     if (target.closest('[data-nav-tab]')) return;
 
@@ -178,11 +180,11 @@ export default function Page() {
       <CloudSync />
       <PasswordResetModal />
       <div
-        className="min-h-screen bg-[#121417] text-gray-100 p-4 md:p-8 font-sans"
+        className="min-h-screen bg-[#121417] text-gray-100 py-4 md:py-8 font-sans"
         onClickCapture={guardLoggedOutAction}
         onSubmitCapture={guardLoggedOutAction}
       >
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 space-y-6">
           <header className="no-print bg-[#1e2228] border border-gray-800 p-6 rounded-2xl shadow-2xl space-y-5">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
@@ -230,7 +232,7 @@ export default function Page() {
                     <button
                       type="button"
                       data-login-trigger
-                      onClick={() => openLogin('signin')}
+                      onClick={() => openLogin('login')}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-600 hover:bg-orange-500 text-[11px] font-bold rounded-lg cursor-pointer text-white shadow-lg shadow-orange-600/20 whitespace-nowrap"
                     >
                       <LogIn className="w-3.5 h-3.5 shrink-0" /> Logger In
@@ -290,18 +292,36 @@ export default function Page() {
             ) : showUi ? (
               <>
                 {activeTab === 'dashboard' && (
-                  <Dashboard onNavigate={(tab) => setActiveTab(tab as TabType)} />
+                  <div className="w-3/4 max-w-full mx-auto">
+                    <Dashboard onNavigate={(tab) => setActiveTab(tab as TabType)} />
+                  </div>
                 )}
                 {activeTab === 'quick-log' && (
-                  <QuickLog onLogged={() => setActiveTab('inventory')} />
+                  <div className="w-3/4 max-w-full mx-auto">
+                    <QuickLog />
+                  </div>
                 )}
-                {activeTab === 'inventory' && <InventoryList />}
-                {activeTab === 'cut-list' && <CutListNesting />}
+                {activeTab === 'inventory' && (
+                  <div className="w-3/4 max-w-full mx-auto">
+                    <InventoryList />
+                  </div>
+                )}
+                {activeTab === 'cut-list' && (
+                  <div className="w-3/4 max-w-full mx-auto">
+                    <CutListNesting />
+                  </div>
+                )}
                 {activeTab === 'matcher' && (
-                  <ProjectMatcher onOpenCutList={() => setActiveTab('cut-list')} />
+                  <div className="w-3/4 max-w-full mx-auto">
+                    <ProjectMatcher onOpenCutList={() => setActiveTab('cut-list')} />
+                  </div>
                 )}
                 {activeTab === 'scanner' && <ScannerTab />}
-                {activeTab === 'storage' && <StorageSettings />}
+                {activeTab === 'storage' && (
+                  <div className="w-3/4 max-w-full mx-auto">
+                    <StorageSettings />
+                  </div>
+                )}
                 {activeTab === 'admin' && showAdmin && <AdminPanel />}
               </>
             ) : null}
@@ -313,28 +333,28 @@ export default function Page() {
         <AppModal
           open={loginGateOpen && !signedIn}
           onClose={() => setLoginGateOpen(false)}
-          title="Logger In required"
+          title="Access your workshop"
           size="md"
         >
           <p className="text-sm text-gray-300 leading-relaxed">
-            Logger In or create an account for full access. It&apos;s free!
+            Sign in or create a free account to save your cut lists and inventory. 100% free.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
             <button
               type="button"
               data-login-trigger
-              onClick={() => openLogin('signin')}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-500 text-white text-sm font-bold rounded-xl cursor-pointer"
+              onClick={() => openLogin('signup')}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl cursor-pointer"
             >
-              <LogIn className="w-4 h-4" /> Logger In
+              <UserPlus className="w-4 h-4" /> Create account
             </button>
             <button
               type="button"
               data-login-trigger
-              onClick={() => openLogin('signup')}
+              onClick={() => openLogin('login')}
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white text-sm font-bold rounded-xl cursor-pointer"
             >
-              <UserPlus className="w-4 h-4 text-orange-400" /> Create account
+              <LogIn className="w-4 h-4" /> Logger In
             </button>
           </div>
         </AppModal>

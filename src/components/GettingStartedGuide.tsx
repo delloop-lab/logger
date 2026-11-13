@@ -53,6 +53,10 @@ export default function GettingStartedGuide() {
               Projects &amp; Cuts when you pick wood species.
             </li>
             <li>
+              <strong className="text-gray-200">Suppliers:</strong> Maintain the list used by Quick
+              Log when source is New or Purchased (you can still pick Other… while logging).
+            </li>
+            <li>
               <strong className="text-gray-200">Storage locations:</strong> Add racks, bins, shed
               shelves, and benches that match your shop so Quick Log can tag where each lot sits.
             </li>
@@ -83,7 +87,7 @@ export default function GettingStartedGuide() {
             <li>
               <strong className="text-gray-200">Description or Supplier (optional):</strong> Beside
               storage location. Salvaged or Furniture Teardown opens Description (e.g. bedhead,
-              stool leg). New or Purchased opens Supplier (e.g. timber yard).
+              stool leg). New or Purchased opens Supplier — choose from Settings or Other….
             </li>
             <li>
               <strong className="text-gray-200">Defects &amp; condition:</strong> Flag warp, knots,
@@ -96,8 +100,9 @@ export default function GettingStartedGuide() {
             </li>
           </ul>
           <p className="text-[11px] text-gray-500">
-            After saving, review lots under Inventory. Print a Stock Tag (System Print or Save PNG)
-            if you want rack labels you can scan later.
+            Quick Log stays open after each save so you can add several lots. Review them under
+            Inventory. Print a Stock Tag (System Print or Save PNG) if you want rack labels you can
+            scan later.
           </p>
         </div>
 
@@ -139,17 +144,20 @@ export default function GettingStartedGuide() {
           </p>
           <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-400">
             <li>
-              Click <strong className="text-gray-200">Generate instructions</strong> (shown with how
-              many boards the plan needs).
+              Click <strong className="text-gray-200">Generate instructions</strong>. If stock does
+              not fit, stock check explains each part (required vs on hand) and lets you laminate
+              thin solid timber, acknowledge planing thicker solid stock, skip a part, pause to buy
+              stock, or generate what already fits. Sheet goods must match thickness exactly.
             </li>
             <li>
               Review the visual cut sheets: rip and crosscut passes aimed at higher yield and less
-              waste. Confirm each cut as you work the board.
+              waste. Laminate layers show as reserved stock — glue and plane before cutting, then
+              re-log leftovers in Quick Log when prompted.
             </li>
             <li>
-              When cuts are applied, usable remnants at or above your minimum offcut size return to
-              inventory; true scrap is retired. Finished pieces show as staged until you mark them
-              installed.
+              Confirm cuts one at a time or mark all remaining complete. Usable remnants at or above
+              your minimum offcut size return to inventory; true scrap is retired. Finished pieces
+              show as staged until you mark them installed.
             </li>
           </ol>
         </div>

@@ -23,6 +23,8 @@ export type NotifyRequest = {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** When set, Confirm stays disabled until the user ticks this acknowledgment. */
+  requireCheck?: string;
   actions?: NotifyAction[];
   resolve?: (ok: boolean) => void;
   resolveChoice?: (actionId: string | null) => void;
@@ -117,6 +119,8 @@ export const notify = {
     confirmLabel?: string;
     cancelLabel?: string;
     danger?: boolean;
+    /** Checkbox label; Confirm disabled until checked. */
+    requireCheck?: string;
   }): Promise<boolean> {
     return new Promise((resolve) => {
       push({
@@ -126,6 +130,7 @@ export const notify = {
         confirmLabel: options.confirmLabel,
         cancelLabel: options.cancelLabel,
         danger: options.danger,
+        requireCheck: options.requireCheck,
         resolve,
       });
     });

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { KeyRound, LogIn, Mail, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Mail } from 'lucide-react';
 import { toast } from '@/lib/notify';
 import {
   requestPasswordReset,
@@ -11,16 +11,25 @@ import {
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import AppModal from '@/components/AppModal';
 
+export type AuthMode = 'signup' | 'login';
+
 type Props = {
   open: boolean;
   onClose: () => void;
-  initialMode?: 'signin' | 'signup';
+  /** Prefer `login` | `signup`. Legacy `signin` is treated as `login`. */
+  initialMode?: AuthMode | 'signin';
 };
 
-export default function AuthModal({ open, onClose, initialMode = 'signin' }: Props) {
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+function normalizeMode(mode: AuthMode | 'signin' | undefined): AuthMode {
+  if (mode === 'signup') return 'signup';
+  return 'login';
+}
+
+export default function AuthModal({ open, onClose, initialMode = 'signup' }: Props) {
+  const [mode, setMode] = useState<AuthMode>(() => normalizeMode(initialMode));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [awaitingEmailConfirm, setAwaitingEmailConfirm] = useState(false);
   const [confirmEmail, setConfirmEmail] = useState('');
@@ -29,15 +38,17 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
 
   useEffect(() => {
     if (open) {
-      setMode(initialMode);
+      setMode(normalizeMode(initialMode));
       setForgotMode(false);
       setAcceptedTerms(false);
+      setShowPassword(false);
     } else {
       setAwaitingEmailConfirm(false);
       setConfirmEmail('');
       setBusy(false);
       setForgotMode(false);
       setAcceptedTerms(false);
+      setShowPassword(false);
     }
   }, [open, initialMode]);
 
@@ -108,19 +119,33 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
     : forgotMode
       ? 'Forgot password'
       : mode === 'signup'
-        ? 'Create account'
-        : 'Logger In';
+        ? 'Create your free account'
+        : 'Welcome back';
 
   const subtitle = awaitingEmailConfirm
     ? 'One more step to open your workshop.'
     : forgotMode
       ? 'Enter your email and we will send a reset link.'
       : mode === 'signup'
-        ? "Your workshop, finally under control. No cost. No fuss, no commitment. Just your email and you're in!"
-        : 'Use your email to open your workshop.';
+        ? 'Your workshop, finally under control. No cost, no credit card, no commitment, save your timber inventory and cut lists across devices.'
+        : 'Logger in to access your saved timber rack and cut lists.';
+
+  const freeBadge =
+    !awaitingEmailConfirm && !forgotMode ? (
+      <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-amber-400/90 uppercase">
+        100% FREE
+      </span>
+    ) : null;
 
   return (
-    <AppModal open={open} onClose={onClose} title={title} subtitle={subtitle} size="md">
+    <AppModal
+      open={open}
+      onClose={onClose}
+      title={title}
+      subtitle={subtitle}
+      badge={freeBadge}
+      size="md"
+    >
       {!isSupabaseConfigured() ? (
         <p className="text-xs text-orange-400">Supabase is not configured in this environment.</p>
       ) : awaitingEmailConfirm ? (
@@ -142,7 +167,7 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
           <button
             type="button"
             onClick={onClose}
-            className="w-full px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-xl cursor-pointer"
+            className="w-full px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl cursor-pointer"
           >
             Got it
           </button>
@@ -158,13 +183,13 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+              className="w-full bg-[#181D23] border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/60"
             />
           </div>
           <button
             type="submit"
             disabled={busy}
-            className="w-full px-4 py-2.5 disabled:opacity-40 bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold rounded-xl cursor-pointer inline-flex items-center justify-center gap-2"
+            className="w-full px-4 py-3 disabled:opacity-40 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl cursor-pointer inline-flex items-center justify-center gap-2"
           >
             <KeyRound className="w-3.5 h-3.5" /> Send reset link
           </button>
@@ -172,7 +197,7 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
             type="button"
             disabled={busy}
             onClick={() => setForgotMode(false)}
-            className="w-full text-xs font-bold text-gray-400 hover:text-orange-400 cursor-pointer bg-transparent border-0 p-0"
+            className="w-full text-xs font-bold text-gray-400 hover:text-amber-400 cursor-pointer bg-transparent border-0 p-0"
           >
             Back to Logger In
           </button>
@@ -198,28 +223,40 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
+              className="w-full bg-[#181D23] border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/60"
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Password</label>
-            <input
-              type="password"
-              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-              placeholder="Password (min 6)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#121417] border border-gray-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                placeholder={
+                  mode === 'signup' ? 'Create a password (min 6 chars)' : 'Enter your password'
+                }
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-[#181D23] border border-gray-700/80 rounded-xl px-3.5 py-2.5 pr-11 text-sm text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/60"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-800/80 cursor-pointer bg-transparent border-0"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
-          {mode === 'signin' ? (
+          {mode === 'login' ? (
             <div className="flex justify-end">
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => setForgotMode(true)}
-                className="text-[11px] font-bold text-orange-400 hover:text-orange-300 cursor-pointer bg-transparent border-0 p-0"
+                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 cursor-pointer bg-transparent border-0 p-0"
               >
                 Forgot password?
               </button>
@@ -230,66 +267,65 @@ export default function AuthModal({ open, onClose, initialMode = 'signin' }: Pro
                 type="checkbox"
                 checked={acceptedTerms}
                 onChange={(e) => setAcceptedTerms(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-600 bg-[#121417] text-orange-600 focus:ring-orange-500"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-600 bg-[#181D23] text-amber-600 focus:ring-amber-500"
               />
               <span className="text-[11px] leading-relaxed text-gray-400">
-                I have read and agree to the{' '}
+                I agree to{' '}
                 <a
                   href="/terms"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-bold text-orange-400 hover:text-orange-300"
+                  className="font-bold text-[#F59E0B] hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  Terms and Conditions
-                </a>{' '}
-                and{' '}
-                <a
-                  href="/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-bold text-orange-400 hover:text-orange-300"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Privacy Policy
+                  T&amp;Cs
                 </a>
-                .
               </span>
             </label>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={(e) => {
-                setMode('signin');
-                void handleSignIn(e);
-              }}
-              className={`px-4 py-2.5 disabled:opacity-40 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center justify-center gap-2 ${
-                mode === 'signin'
-                  ? 'bg-orange-600 hover:bg-orange-500'
-                  : 'bg-gray-800 hover:bg-gray-700'
-              }`}
-            >
-              <LogIn className="w-3.5 h-3.5" /> Logger In
-            </button>
-            <button
-              type="button"
-              disabled={busy || (mode === 'signup' && !acceptedTerms)}
-              onClick={() => {
-                setMode('signup');
-                if (mode === 'signup') void handleSignUp();
-              }}
-              className={`px-4 py-2.5 disabled:opacity-40 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center justify-center gap-2 ${
-                mode === 'signup'
-                  ? 'bg-orange-600 hover:bg-orange-500'
-                  : 'bg-gray-800 hover:bg-gray-700'
-              }`}
-            >
-              <UserPlus className="w-3.5 h-3.5" /> Create account
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={busy || (mode === 'signup' && !acceptedTerms)}
+            className="w-full py-3 mt-1 disabled:opacity-40 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl cursor-pointer"
+          >
+            {mode === 'signup' ? 'Create Free Account →' : 'Logger In →'}
+          </button>
+
+          <p className="text-center text-xs text-gray-400 pt-1">
+            {mode === 'signup' ? (
+              <>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setMode('login');
+                    setAcceptedTerms(false);
+                    setShowPassword(false);
+                  }}
+                  className="font-bold text-[#F59E0B] hover:underline cursor-pointer bg-transparent border-0 p-0"
+                >
+                  Logger In
+                </button>
+              </>
+            ) : (
+              <>
+                New to Logger?{' '}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setMode('signup');
+                    setShowPassword(false);
+                  }}
+                  className="font-bold text-[#F59E0B] hover:underline cursor-pointer bg-transparent border-0 p-0"
+                >
+                  Create a free account
+                </button>
+              </>
+            )}
+          </p>
         </form>
       )}
     </AppModal>

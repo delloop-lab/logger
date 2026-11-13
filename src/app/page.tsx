@@ -59,6 +59,8 @@ const features = [
       'Required component dimensions',
       'Available board sizes',
       'Timber thickness',
+      'Matching species only — no silent substitutes',
+      'Stock check when thickness or size does not fit',
       'Cutting sequences',
       'Material utilisation',
       'Remaining usable offcuts',
@@ -75,6 +77,7 @@ const features = [
       'Clear cutting diagrams',
       'Dimensions for every piece',
       'Optimised cutting layouts',
+      'Face-laminate options when solid stock is too thin',
       'Less material waste',
     ],
     foot: 'Less guesswork at the saw. More timber for your next project.',
@@ -151,6 +154,34 @@ const audiences = [
   ],
 ];
 
+function LandingCta({
+  href = '/app?signup=1',
+  label,
+  align = 'center',
+  className = '',
+}: {
+  href?: string;
+  label: string;
+  align?: 'center' | 'start';
+  className?: string;
+}) {
+  return (
+    <div
+      className={`${align === 'center' ? 'flex flex-col items-center text-center' : 'flex flex-col items-start'} ${className}`.trim()}
+    >
+      <a href={href} className="btn btn-cta">
+        {label}
+      </a>
+      <p
+        className="mt-3 text-sm"
+        style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 65%, transparent)' }}
+      >
+        No credit card required • Instant access • Free forever
+      </p>
+    </div>
+  );
+}
+
 const compare = [
   ['Generic stock records', 'Timber-specific records'],
   ['Stock quantities', 'Individual boards and offcuts'],
@@ -184,6 +215,14 @@ const faqs = [
   [
     'Can Logger help me plan cuts?',
     'Yes. Enter the pieces you need and generate a practical cutting plan from the timber you already have.',
+  ],
+  [
+    'What if my stock is too thin or the wrong thickness?',
+    'Logger runs a stock check before cutting sheets. For solid timber you can face-laminate thinner layers (with acknowledgment), acknowledge planing thicker stock, skip a part, or pause the project. Sheet goods such as plywood must match the required thickness exactly.',
+  ],
+  [
+    'Will Logger substitute a different wood species?',
+    'No. Parts are matched to the species you specified. Log suitable stock, skip that part, or pause until you have the right timber.',
   ],
   [
     'Does it identify wood species from photographs?',
@@ -225,20 +264,25 @@ export default function LandingPage() {
             }}
           />
           <nav className="relative section-pad flex items-center justify-between py-6">
-            <a href="/" aria-label="Logger home">
-              <img
-                src="/brand/logger-logo.png"
-                alt="Logger"
-                className="block h-10 w-auto md:h-12"
-                draggable={false}
-              />
-            </a>
+            <div className="flex items-center gap-2.5">
+              <a href="/" aria-label="Logger home">
+                <img
+                  src="/brand/logger-logo.png"
+                  alt="Logger"
+                  className="block h-10 w-auto md:h-12"
+                  draggable={false}
+                />
+              </a>
+              <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-amber-400/90 uppercase">
+                100% FREE
+              </span>
+            </div>
             <a href="/app?login=1" className="btn btn-primary">
               Logger In
             </a>
           </nav>
           <div className="relative section-pad pb-24 pt-16 md:pt-28">
-            <p className="eyebrow">Your timber. Your offcuts. Your projects.</p>
+            <p className="eyebrow">100% FREE WORKSHOP TOOL • NO CREDIT CARD</p>
             <h1
               className="mt-6 max-w-3xl"
               style={{ fontSize: 'clamp(2.5rem, 6vw, 4.5rem)', lineHeight: 1.05 }}
@@ -261,16 +305,24 @@ export default function LandingPage() {
               the timber you already have, without turning your time in the workshop into another
               admin job.
             </p>
-            <div className="mt-10 flex flex-wrap gap-3">
-              <a href="#problem" className="btn btn-primary">
-                Explore Logger
-              </a>
-              <a href="/app" className="btn btn-ghost">
-                Demo
-              </a>
-              <a href="/app?signup=1" className="btn btn-ghost">
-                Create Account
-              </a>
+            <div className="mt-10">
+              <div className="flex flex-wrap gap-3">
+                <a href="#problem" className="btn btn-primary">
+                  Explore Logger
+                </a>
+                <a href="/app" className="btn btn-ghost">
+                  Demo
+                </a>
+                <a href="/app?signup=1" className="btn btn-ghost">
+                  Start using Logger (Free)
+                </a>
+              </div>
+              <p
+                className="mt-3 text-sm"
+                style={{ color: 'color-mix(in srgb, var(--tv-bark-foreground) 70%, transparent)' }}
+              >
+                100% free • No credit card • No account required
+              </p>
             </div>
             <p
               className="mt-10 text-xl body-copy"
@@ -384,62 +436,100 @@ export default function LandingPage() {
           </h2>
           <div className="mt-16 space-y-20">
             {features.map((f, i) => (
-              <article
-                key={f.tag}
-                className={`grid items-center gap-10 md:grid-cols-2 ${i % 2 ? 'md:[&>*:first-child]:order-2' : ''}`}
-              >
-                <div>
-                  <p className="eyebrow">
-                    {f.tag} · {f.name}
-                  </p>
-                  <h3 className="mt-3" style={{ fontSize: 'clamp(1.75rem, 3vw, 2.25rem)' }}>
-                    {f.title}
-                  </h3>
-                  <p className="mt-4 body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
-                    {f.body}
-                  </p>
-                  <p className="mt-6 text-lg body-copy" style={{ fontFamily: 'var(--tv-font-sans)' }}>
-                    {f.foot}
-                  </p>
-                </div>
-                {'img' in f && f.img ? (
-                  <div>
+              <React.Fragment key={f.tag}>
+                {f.tag === 'C' ? (
+                  <div
+                    className="relative overflow-hidden rounded-2xl px-6 py-12 md:px-10 md:py-14"
+                    style={{ background: 'var(--tv-bark)', color: 'var(--tv-bark-foreground)' }}
+                  >
                     <img
-                      src={f.img}
-                      alt={f.name}
+                      src="/landing/cut-plan.png"
+                      alt=""
                       loading="lazy"
                       width={1200}
                       height={912}
-                      className="rounded-lg object-cover shadow-xl"
+                      className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                      style={{ opacity: 0.18 }}
                     />
-                    <ul className="mt-4 flex flex-wrap gap-2">
-                      {f.list.map((l) => (
-                        <li
-                          key={l}
-                          className="rounded-full px-3 py-1 text-sm"
-                          style={{ background: 'var(--tv-muted)' }}
-                        >
-                          {l}
+                    <div className="relative mx-auto max-w-xl text-center">
+                      <p className="eyebrow">Cut planning</p>
+                      <h3
+                        className="mt-3"
+                        style={{ fontSize: 'clamp(1.5rem, 3vw, 2rem)', lineHeight: 1.2 }}
+                      >
+                        Ready to waste less timber on your next cut?
+                      </h3>
+                      <p
+                        className="mt-3 text-base body-copy"
+                        style={{
+                          color: 'color-mix(in srgb, var(--tv-bark-foreground) 80%, transparent)',
+                        }}
+                      >
+                        Open the optimizer, drop in the pieces you need, and see a practical layout
+                        from the stock you already have.
+                      </p>
+                      <LandingCta label="Jump Into Your Workshop →" className="mt-8" />
+                    </div>
+                  </div>
+                ) : null}
+                <article
+                  className={`grid items-center gap-10 md:grid-cols-2 ${i % 2 ? 'md:[&>*:first-child]:order-2' : ''}`}
+                >
+                  <div>
+                    <p className="eyebrow">
+                      {f.tag} · {f.name}
+                    </p>
+                    <h3 className="mt-3" style={{ fontSize: 'clamp(1.75rem, 3vw, 2.25rem)' }}>
+                      {f.title}
+                    </h3>
+                    <p className="mt-4 body-copy" style={{ color: 'var(--tv-muted-foreground)' }}>
+                      {f.body}
+                    </p>
+                    <p className="mt-6 text-lg body-copy" style={{ fontFamily: 'var(--tv-font-sans)' }}>
+                      {f.foot}
+                    </p>
+                  </div>
+                  {'img' in f && f.img ? (
+                    <div>
+                      <img
+                        src={f.img}
+                        alt={f.name}
+                        loading="lazy"
+                        width={1200}
+                        height={912}
+                        className="rounded-lg object-cover shadow-xl"
+                      />
+                      <ul className="mt-4 flex flex-wrap gap-2">
+                        {f.list.map((l) => (
+                          <li
+                            key={l}
+                            className="rounded-full px-3 py-1 text-sm"
+                            style={{ background: 'var(--tv-muted)' }}
+                          >
+                            {l}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <ul
+                      className="divide-y rounded-lg border"
+                      style={{ background: 'var(--tv-card)', borderColor: 'var(--tv-border)' }}
+                    >
+                      {f.list.map((l, j) => (
+                        <li key={l} className="flex items-center gap-4 px-6 py-4">
+                          <span
+                            style={{ fontFamily: 'var(--tv-font-display)', color: 'var(--tv-primary)' }}
+                          >
+                            {String(j + 1).padStart(2, '0')}
+                          </span>
+                          <span>{l}</span>
                         </li>
                       ))}
                     </ul>
-                  </div>
-                ) : (
-                  <ul
-                    className="divide-y rounded-lg border"
-                    style={{ background: 'var(--tv-card)', borderColor: 'var(--tv-border)' }}
-                  >
-                    {f.list.map((l, j) => (
-                      <li key={l} className="flex items-center gap-4 px-6 py-4">
-                        <span style={{ fontFamily: 'var(--tv-font-display)', color: 'var(--tv-primary)' }}>
-                          {String(j + 1).padStart(2, '0')}
-                        </span>
-                        <span>{l}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </article>
+                  )}
+                </article>
+              </React.Fragment>
             ))}
           </div>
         </section>
@@ -650,9 +740,7 @@ export default function LandingPage() {
               Logger takes care of the organising, planning and calculating, so you can spend more
               time doing what you enjoy. Start with one board, one project or a handful of offcuts.
             </p>
-            <a href="/app?signup=1" className="btn btn-primary mt-10">
-              Get Started with Logger
-            </a>
+            <LandingCta label="Jump Into Your Workshop →" className="mt-10" />
           </div>
         </section>
 

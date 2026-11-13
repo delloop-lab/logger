@@ -103,10 +103,12 @@ export default function HelpGuide({
             storage location, dimensions, and quantity. Source opens an optional field beside
             location: <strong className="text-gray-200">Description</strong> (for Salvaged or
             Furniture Teardown, e.g. bedhead or stool leg) or{' '}
-            <strong className="text-gray-200">Supplier</strong> (for New or Purchased). Optionally
-            mark defects (warp, knot, split, and so on) plus defect notes. Logger assigns a lot tag
-            id automatically (based on species). After you save, the lot appears in Inventory and on
-            the Dashboard.
+            <strong className="text-gray-200">Supplier</strong> (for New or Purchased — pick from
+            your Settings suppliers list, or choose <strong className="text-gray-200">Other…</strong>{' '}
+            to type a new name). Optionally mark defects (warp, knot, split, and so on) plus defect
+            notes. Logger assigns a lot tag id automatically (based on species). The form stays open
+            after each save so you can log several lots in a row; each lot appears in Inventory and
+            on the Dashboard.
           </p>
           <HelpShot
             src="/help/help-tab-quick-log.png"
@@ -120,10 +122,11 @@ export default function HelpGuide({
           <p className="text-xs text-gray-400">
             Full catalogue of every lot: raw stock, reusable offcuts, waste remnants, and finished
             parts. Filter by status (available, staged, consumed), type (stock / offcuts /
-            finished), species, or project. Sort columns, edit dimensions and location, delete
-            lots, mark finished pieces installed, and open{' '}
-            <strong className="text-gray-200">Print label</strong> for QR tags (system print or
-            save as image).
+            finished), species, or project. Sort columns, edit dimensions and location, select
+            several lots to delete or print together, mark finished pieces installed, and open{' '}
+            <strong className="text-gray-200">Print label</strong> for QR tags (system print or save
+            as image). Deleting stock that a cut plan still uses invalidates that plan so you
+            regenerate from what is left.
           </p>
           <HelpShot
             src="/help/help-tab-inventory.png"
@@ -137,9 +140,15 @@ export default function HelpGuide({
           <p className="text-xs text-gray-400">
             Plan a build end to end. Name or open a project, add parts (name, species from your
             lumber types, size, quantity), set kerf and cutting strategy, then generate nested
-            cutting sheets against available boards. Review shop drawings, save or pause projects
-            when stock is short, resume later, and apply cuts so remnants / finished parts update
-            Inventory.
+            cutting sheets against available boards. Before sheets open, a{' '}
+            <strong className="text-gray-200">stock check</strong> flags mismatches: missing
+            species, stock too thin or too thick, or sheet goods that are not the exact thickness.
+            Logger does not substitute a different species. For solid timber that is too thin you
+            can choose a <strong className="text-gray-200">face-laminate</strong> pairing (layers
+            are reserved, then consumed when you confirm the finished cut — re-log any leftover
+            blank in Quick Log). Thicker solid stock can be used after you acknowledge planing;
+            plywood / sheet goods are never suggested for planing. Confirm cuts one at a time or
+            mark all remaining complete. Save or pause when stock is short, then resume later.
           </p>
           <HelpShot
             src="/help/help-tab-projects-cuts.png"
@@ -191,14 +200,15 @@ export default function HelpGuide({
           <p className="text-xs text-gray-400">
             Workshop preferences: metric (mm) or imperial (inches), default saw kerf for new
             projects, minimum size that counts as a reusable offcut, lumber types (add or rename
-            species such as Birch Plywood or Jarrah), and your list of storage locations (rack,
-            workbench, shed, and so on). Also shows who is signed in and tools to reset workshop
-            data if you need a clean start.
+            species such as Birch Plywood or Jarrah), storage locations (rack, workbench, shed),
+            and a <strong className="text-gray-200">suppliers</strong> list used by the Quick Log
+            Supplier dropdown. Also shows who is signed in, workshop backups, and tools to reset
+            workshop data if you need a clean start.
           </p>
           <HelpShot
             src="/help/help-tab-settings.png"
-            alt="Logger Settings tab for units, kerf, offcuts, lumber types, and locations"
-            caption="Settings: kerf, offcut rules, lumber types (add/rename), locations"
+            alt="Logger Settings tab for units, kerf, offcuts, lumber types, suppliers, and locations"
+            caption="Settings: kerf, offcut rules, lumber types, suppliers, locations"
           />
         </div>
       </section>
@@ -262,8 +272,40 @@ export default function HelpGuide({
             </p>
             <p className="text-gray-400 mt-0.5">
               Optional fields beside Storage Location. Salvaged or Furniture Teardown shows
-              Description (what the piece was). New or Purchased shows Supplier (where you bought
-              it).
+              Description (what the piece was). New or Purchased shows Supplier — pick from the
+              list managed in Settings, or choose Other… to add a one-off name. Quick Log stays
+              open after each save so you can keep logging.
+            </p>
+          </div>
+          <div>
+            <p className="font-bold text-gray-100">
+              What happens if stock is the wrong thickness for a part?
+            </p>
+            <p className="text-gray-400 mt-0.5">
+              Stock check shows the part, the gap (required vs on hand), and clear actions. Too
+              thin on solid timber: laminate layers (with acknowledgment) or skip the part. Too
+              thick on solid timber: acknowledge planing, or skip. Sheet goods (plywood, MDF, and
+              similar) must match thickness exactly — planing is not suggested. You can also pause
+              the project to buy stock, or generate only what already fits.
+            </p>
+          </div>
+          <div>
+            <p className="font-bold text-gray-100">
+              If I laminate, what happens to those boards?
+            </p>
+            <p className="text-gray-400 mt-0.5">
+              Both layers are reserved on the cut plan, then consumed when you confirm the finished
+              cut. Logger asks you to re-log any leftover laminated blank or offcut in Quick Log
+              with the measured size — the old layer tags are no longer stock.
+            </p>
+          </div>
+          <div>
+            <p className="font-bold text-gray-100">
+              Will Logger use a different species if mine is missing?
+            </p>
+            <p className="text-gray-400 mt-0.5">
+              No. Parts need matching species stock. Log the right timber, skip that part, or pause
+              the project.
             </p>
           </div>
           <div>

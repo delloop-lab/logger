@@ -1,7 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useAppStore, CutPart, DEFAULT_LUMBER_TYPES } from '@/lib/store';
+import {
+  useAppStore,
+  CutPart,
+  DEFAULT_LUMBER_TYPES,
+  type PlanLamination,
+} from '@/lib/store';
 import { displayToMm, formatDim, mmToDisplay, unitLabel } from '@/lib/units';
 import {
   STRATEGY_META,
@@ -29,20 +34,51 @@ import {
 } from 'lucide-react';
 import CutListDrawing from '@/components/CutListDrawing';
 import SpeciesSelect from '@/components/SpeciesSelect';
+import StockCheckModal, {
+  type AcceptedLamination,
+  type LaminateOption,
+  type StockCheckIssue,
+  type StockCheckResolution,
+} from '@/components/StockCheckModal';
 import { notify, toast } from '@/lib/notify';
 
-async function offerStockGapChoice(stockGaps: string[]): Promise<'pause' | 'generate' | 'cancel'> {
-  const action = await notify.choice({
-    title: 'Stock missing for this project',
-    message: `${stockGaps.join('\n\n')}\n\nPause this project while you purchase the correct stock, or generate sheets only for parts that fit now.`,
-    actions: [
-      { id: 'pause', label: 'Pause project (buy stock later)', primary: true },
-      { id: 'generate', label: 'Generate what fits now' },
-      { id: 'cancel', label: 'Cancel' },
-    ],
-  });
-  if (action === 'pause' || action === 'generate') return action;
-  return 'cancel';
+function isSheetGoodSpecies(species: string) {
+  const s = (species || '').toLowerCase();
+  return (
+    s.includes('ply') ||
+    s.includes('plywood') ||
+    s.includes('mdf') ||
+    s.includes('melamine') ||
+    s.includes('particle')
+  );
+}
+
+function buildLaminateOptions(
+  stock: ReturnType<typeof expandLotsToStock>,
+  needT: number,
+  unitSystem: 'metric' | 'imperial'
+): LaminateOption[] {
+  const sorted = [...stock].sort(
+    (a, b) => (Number(b.thickness) || 0) - (Number(a.thickness) || 0)
+  );
+  const options: LaminateOption[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length; j++) {
+      const a = sorted[i];
+      const b = sorted[j];
+      const total = (Number(a.thickness) || 0) + (Number(b.thickness) || 0);
+      if (total + 0.1 < needT) continue;
+      options.push({
+        id: `${a.id}+${b.id}`,
+        boardIds: [a.id, b.id],
+        boardTags: [a.tagId, b.tagId],
+        totalThickness: total,
+        label: `Combine ${a.tagId} (${formatDim(Number(a.thickness) || 0, unitSystem)}) + ${b.tagId} (${formatDim(Number(b.thickness) || 0, unitSystem)}) → ${formatDim(total, unitSystem)}`,
+      });
+      if (options.length >= 8) return options;
+    }
+  }
+  return options;
 }
 
 export default function CutListNesting() {
@@ -72,6 +108,11 @@ export default function CutListNesting() {
 
   const [isGenerated, setIsGenerated] = useState(false);
   const [allowThinStock, setAllowThinStock] = useState(false);
+  const [laminatePartIds, setLaminatePartIds] = useState<string[]>([]);
+  const [laminations, setLaminations] = useState<PlanLamination[]>([]);
+  const [stockCheckOpen, setStockCheckOpen] = useState(false);
+  const [stockCheckIssues, setStockCheckIssues] = useState<StockCheckIssue[]>([]);
+  const [stockCheckCanPartial, setStockCheckCanPartial] = useState(false);
   const sheetsAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const revealSavedCuttingSheets = store.revealSavedCuttingSheets;
@@ -326,50 +367,210 @@ export default function CutListNesting() {
     }
   };
 
-  const thicknessWarnings = (): string[] => {
-    const activeStock = expandLotsToStock(boards);
-    const warnings: string[] = [];
-
-    for (const part of activeParts) {
-      const stock = activeStock.filter((b) => speciesMatches(part.species, b.species));
-      if (stock.length === 0) continue;
-
-      const maxStockT = Math.max(...stock.map((b) => Number(b.thickness) || 0));
-      const minStockT = Math.min(...stock.map((b) => Number(b.thickness) || 0));
-      const needT = part.thickness;
-
-      if (needT != null && needT > 0) {
-        if (maxStockT + 0.1 < needT) {
-          warnings.push(
-            `${part.name}: needs ${formatDim(needT, unitSystem)} thick, but thickest ${part.species} stock is ${formatDim(maxStockT, unitSystem)}.`
-          );
-        } else if (Math.abs(maxStockT - needT) > 0.5 && minStockT + 0.1 < needT) {
-          warnings.push(
-            `${part.name}: needs ${formatDim(needT, unitSystem)}; some ${part.species} stock is only ${formatDim(minStockT, unitSystem)}.`
-          );
-        } else if (Math.abs(maxStockT - needT) > 0.5) {
-          warnings.push(
-            `${part.name}: needs ${formatDim(needT, unitSystem)}, stock on hand is ${formatDim(maxStockT, unitSystem)}.`
-          );
-        }
-      } else if (maxStockT > 0) {
-        warnings.push(
-          `${part.name}: no thickness set; ${part.species} stock is ${formatDim(minStockT, unitSystem)}${
-            minStockT !== maxStockT ? ` to ${formatDim(maxStockT, unitSystem)}` : ''
-          }.`
-        );
-      }
-    }
-
-    return warnings;
+  const runGenerate = (opts?: {
+    ignoreThickness?: boolean;
+    laminateIds?: string[];
+    laminations?: AcceptedLamination[];
+  }) => {
+    // Clear first (releases prior laminate allocations) while stock is still active for nest.
+    store.clearActiveCuttingPlan();
+    const nextLams: PlanLamination[] = (opts?.laminations || []).map((l) => ({
+      partId: l.partId,
+      partName: l.partName,
+      boardIds: [...l.boardIds],
+      boardTags: [...l.boardTags],
+      totalThickness: l.totalThickness,
+      targetThickness: l.targetThickness,
+      label: l.label,
+    }));
+    setAllowThinStock(Boolean(opts?.ignoreThickness) || nextLams.length > 0);
+    setLaminatePartIds(opts?.laminateIds || nextLams.map((l) => l.partId));
+    setLaminations(nextLams);
+    setIsGenerated(true);
+    toast.success(
+      nextLams.length > 0
+        ? 'Generated sheets. Laminate layers are reserved after the nest saves — glue, plane, then cut.'
+        : 'Generated optimized cutting instructions & drawings!'
+    );
   };
 
-  const runGenerate = (proceedThin: boolean) => {
-    // Fresh nest from current stock; CutListDrawing persists the new plan
-    store.clearActiveCuttingPlan();
-    setAllowThinStock(proceedThin);
-    setIsGenerated(true);
-    toast.success('Generated optimized cutting instructions & drawings!');
+  // Restore laminate pairings when reopening a saved plan
+  useEffect(() => {
+    const saved = activeCuttingPlan?.laminations;
+    if (!saved?.length) return;
+    setLaminations(saved);
+    setLaminatePartIds(saved.map((l) => l.partId));
+    setAllowThinStock(true);
+  }, [activeCuttingPlan]);
+
+  const collectStockCheckIssues = (): {
+    issues: StockCheckIssue[];
+    canGeneratePartial: boolean;
+  } => {
+    const nestStock = expandLotsToStock(boards);
+    const engineParts = activeParts.map((p) => ({
+      id: p.id,
+      name: p.name,
+      species: p.species,
+      length: p.length,
+      width: p.width,
+      thickness: p.thickness ?? 0,
+      quantity: p.quantity,
+    }));
+    const testPlan = createCuttingPlan(nestStock, engineParts, {
+      kerfMm: activeKerfMm,
+      strategy: activeStrategy,
+    });
+
+    // Nest expands qty into piece ids `${part.id}-${n}`. Always key issues by project part id
+    // so we don't show "Top (1/1)" and "Top" as two separate cards.
+    const partById = new Map(activeParts.map((p) => [p.id, p]));
+    const rootPartId = (pieceId: string) => {
+      if (partById.has(pieceId)) return pieceId;
+      const dash = pieceId.lastIndexOf('-');
+      if (dash > 0) {
+        const maybe = pieceId.slice(0, dash);
+        if (partById.has(maybe)) return maybe;
+      }
+      return pieceId;
+    };
+
+    const issues: StockCheckIssue[] = [];
+    const seen = new Set<string>();
+
+    for (const uPart of testPlan.unallocated) {
+      const rootId = rootPartId(uPart.id);
+      if (seen.has(rootId)) continue;
+      seen.add(rootId);
+
+      const projectPart = partById.get(rootId);
+      const matching = nestStock.filter((b) => speciesMatches(uPart.species, b.species));
+      const needT = Number(uPart.thickness) || 0;
+      const partInfo = {
+        id: rootId,
+        name: projectPart?.name || uPart.name.replace(/\s*\(\d+\/\d+\)\s*$/, ''),
+        species: uPart.species,
+        length: uPart.length,
+        width: uPart.width,
+        thickness: needT,
+      };
+
+      if (matching.length === 0) {
+        issues.push({
+          kind: 'no_species',
+          part: partInfo,
+          detail: `No ${uPart.species} stock logged.`,
+        });
+        continue;
+      }
+
+      const maxStockT = Math.max(...matching.map((b) => Number(b.thickness) || 0));
+      const thickest = matching.reduce((a, b) =>
+        (Number(a.thickness) || 0) >= (Number(b.thickness) || 0) ? a : b
+      );
+      const sheet = isSheetGoodSpecies(uPart.species);
+
+      if (needT > 0 && maxStockT + 0.1 < needT) {
+        issues.push({
+          kind: sheet ? 'ply_mismatch' : 'too_thin',
+          part: partInfo,
+          requiredThickness: needT,
+          maxAvailableThickness: maxStockT,
+          stockLabel: thickest.tagId,
+          ...(sheet
+            ? {}
+            : { laminateOptions: buildLaminateOptions(matching, needT, unitSystem) }),
+        });
+        continue;
+      }
+
+      issues.push({
+        kind: 'too_small',
+        part: partInfo,
+        requiredThickness: needT || undefined,
+        maxAvailableThickness: maxStockT || undefined,
+        stockLabel: thickest.tagId,
+        detail: diagnoseUnallocated(uPart, nestStock),
+      });
+    }
+
+    // Thicker-than-needed stock still places in the nest — catch planing / ply mismatches here.
+    for (const part of activeParts) {
+      if (seen.has(part.id)) continue;
+      const stock = nestStock.filter((b) => speciesMatches(part.species, b.species));
+      if (stock.length === 0) continue;
+      const needT = part.thickness;
+      if (needT == null || needT <= 0) continue;
+      const maxStockT = Math.max(...stock.map((b) => Number(b.thickness) || 0));
+      const minStockT = Math.min(...stock.map((b) => Number(b.thickness) || 0));
+      const thickest = stock.reduce((a, b) =>
+        (Number(a.thickness) || 0) >= (Number(b.thickness) || 0) ? a : b
+      );
+      const sheet = isSheetGoodSpecies(part.species);
+
+      const tooThick =
+        (Math.abs(maxStockT - needT) > 0.5 && minStockT > needT + 0.5) ||
+        maxStockT > needT + 0.5;
+      if (!tooThick) continue;
+
+      seen.add(part.id);
+      issues.push({
+        kind: sheet ? 'ply_mismatch' : 'too_thick',
+        part: {
+          id: part.id,
+          name: part.name,
+          species: part.species,
+          length: part.length,
+          width: part.width,
+          thickness: needT,
+        },
+        requiredThickness: needT,
+        maxAvailableThickness: maxStockT,
+        stockLabel: thickest.tagId,
+      });
+    }
+
+    return {
+      issues,
+      canGeneratePartial: (testPlan.placements?.length || 0) > 0,
+    };
+  };
+
+  const applyStockCheckResolution = (result: StockCheckResolution) => {
+    setStockCheckOpen(false);
+    if (result.action === 'cancel') return;
+
+    if (result.action === 'pause') {
+      const reason = stockCheckIssues
+        .map((i) => {
+          if (i.kind === 'too_thin') {
+            return `• ${i.part.name}: need ${formatDim(i.requiredThickness || 0, unitSystem)}, max ${formatDim(i.maxAvailableThickness || 0, unitSystem)}`;
+          }
+          if (i.kind === 'too_thick' || i.kind === 'ply_mismatch') {
+            return `• ${i.part.name}: need ${formatDim(i.requiredThickness || 0, unitSystem)}, on hand ${formatDim(i.maxAvailableThickness || 0, unitSystem)}`;
+          }
+          return `• ${i.part.name}: ${i.detail || i.kind}`;
+        })
+        .join('\n');
+      handlePauseForStock(reason);
+      return;
+    }
+
+    if (result.skippedPartIds.length > 0) {
+      const skip = new Set(result.skippedPartIds);
+      const nextParts = activeParts.filter((p) => !skip.has(p.id));
+      store.setActiveParts(nextParts);
+      toast.success(
+        `Skipped ${result.skippedPartIds.length} part${result.skippedPartIds.length === 1 ? '' : 's'} from this generate.`
+      );
+    }
+
+    // Only lamination needs thickness ignored for nesting; thicker stock already fits.
+    runGenerate({
+      ignoreThickness: result.laminatePartIds.length > 0,
+      laminateIds: result.laminatePartIds,
+      laminations: result.laminations,
+    });
   };
 
   const handleGenerateInstructions = async () => {
@@ -390,51 +591,15 @@ export default function CutListNesting() {
       }
     }
 
-    // Run the real cutting engine against current stock and strategy so we only report genuine unallocated parts
-    const nestStock = expandLotsToStock(boards);
-    const engineParts = activeParts.map((p) => ({
-      id: p.id,
-      name: p.name,
-      species: p.species,
-      length: p.length,
-      width: p.width,
-      thickness: p.thickness ?? 0,
-      quantity: p.quantity,
-    }));
-    const testPlan = createCuttingPlan(nestStock, engineParts, {
-      kerfMm: activeKerfMm,
-      strategy: activeStrategy,
-    });
-    const stockGaps = testPlan.unallocated.map((uPart) => {
-      const reason = diagnoseUnallocated(uPart, nestStock);
-      return `• ${uPart.name} (${uPart.species}) ${formatDim(uPart.length, unitSystem)} × ${formatDim(uPart.width, unitSystem)}${
-        uPart.thickness ? ` × ${formatDim(uPart.thickness, unitSystem)}` : ''
-      }\n  ${reason}`;
-    });
-
-    if (stockGaps.length > 0) {
-      const choice = await offerStockGapChoice(stockGaps);
-      if (choice === 'cancel') return;
-      if (choice === 'pause') {
-        handlePauseForStock(stockGaps.join('\n\n'));
-        return;
-      }
-      // choice === 'generate' → continue
-    }
-
-    const warnings = thicknessWarnings();
-    if (warnings.length > 0) {
-      const ok = await notify.confirm({
-        title: 'Thickness check',
-        message: `${warnings.map((w) => `• ${w}`).join('\n')}\n\nGenerate instructions anyway?`,
-        confirmLabel: 'Generate anyway',
-      });
-      if (!ok) return;
-      runGenerate(true);
+    const { issues, canGeneratePartial } = collectStockCheckIssues();
+    if (issues.length > 0) {
+      setStockCheckIssues(issues);
+      setStockCheckCanPartial(canGeneratePartial);
+      setStockCheckOpen(true);
       return;
     }
 
-    runGenerate(false);
+    runGenerate();
   };
 
   const totalBoardsRequired = activeParts.reduce((acc, p) => acc + p.quantity, 0);
@@ -992,10 +1157,21 @@ export default function CutListNesting() {
       {/* Printable cutting sheets only */}
       {isGenerated && activeParts.length > 0 && (
         <div ref={sheetsAnchorRef} className="space-y-6 pt-4 scroll-mt-4">
-          <CutListDrawing ignorePartThickness={allowThinStock} />
+          <CutListDrawing
+            ignorePartThickness={allowThinStock}
+            laminatePartIds={laminatePartIds}
+            laminations={laminations}
+          />
         </div>
       )}
 
+      <StockCheckModal
+        open={stockCheckOpen}
+        unitSystem={unitSystem}
+        issues={stockCheckIssues}
+        canGeneratePartial={stockCheckCanPartial}
+        onClose={applyStockCheckResolution}
+      />
     </div>
   );
 }

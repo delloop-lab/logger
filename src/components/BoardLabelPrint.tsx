@@ -21,7 +21,8 @@ import AppModal from '@/components/AppModal';
 import { toast } from '@/lib/notify';
 
 type Props = {
-  board: Board | null;
+  /** One or more lots to print. Empty / omitted closes the dialog. */
+  boards: Board[];
   unitSystem: UnitSystem;
   onClose: () => void;
 };
@@ -281,8 +282,50 @@ export async function renderBoardLabelToPngDataUrl(
   return canvas.toDataURL('image/png');
 }
 
-export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
-  const qrWrapRef = useRef<HTMLDivElement | null>(null);
+function LabelCard({ board, unitSystem }: { board: Board; unitSystem: UnitSystem }) {
+  return (
+    <div
+      className="timbervault-board-label bg-white text-black rounded-xl border-[3px] border-black print:rounded-none"
+      data-label-id={board.id}
+    >
+      <div className="board-label-header bg-black text-white px-4 py-1.5 flex items-center justify-between font-mono">
+        <span className="board-label-brand text-xs font-black tracking-wider">LOGGER</span>
+        <span className="board-label-subtitle text-[10px] font-black text-white tracking-wide">
+          STOCK TAG
+        </span>
+      </div>
+      <div className="board-label-body p-4 flex items-start gap-4">
+        <div className="board-label-qr shrink-0 bg-white p-1">
+          <QRCodeSVG
+            value={boardLabelQrValue(board.tagId)}
+            size={145}
+            level="M"
+            includeMargin={false}
+            className="shrink-0"
+            style={{ shapeRendering: 'crispEdges' }}
+          />
+        </div>
+        <div className="board-label-meta min-w-0 flex-1 space-y-2 font-mono border-l-[3px] border-black pl-3.5">
+          <div className="board-label-tag text-2xl font-black tracking-wide border-b-2 border-black pb-1 text-black">
+            {board.tagId}
+          </div>
+          <div className="board-label-species font-sans font-black text-lg text-black leading-tight">
+            {board.species}
+          </div>
+          <div className="board-label-dims text-base font-black text-black leading-tight">
+            {formatDimsLWT(board.length, board.width, board.thickness, unitSystem)}
+          </div>
+          <div className="board-label-loc text-base font-black text-black leading-tight">
+            Loc: {board.location || 'None'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function BoardLabelPrint({ boards, unitSystem, onClose }: Props) {
+  const labelsRootRef = useRef<HTMLDivElement | null>(null);
   const [config, setConfig] = useState<TiMiniCliConfig>(DEFAULT_CONFIG);
   const [showCliSettings, setShowCliSettings] = useState(false);
 
@@ -295,6 +338,11 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
     'idle' | 'printing' | 'scanning' | 'feeding' | 'retracting'
   >('idle');
   const [discoveredPrinters, setDiscoveredPrinters] = useState<DiscoveredPrinter[]>([]);
+
+  const labelBoards = boards.filter(Boolean);
+  const labelCount = labelBoards.length;
+  const isMulti = labelCount > 1;
+  const boardsKey = labelBoards.map((b) => b.id).join('|');
 
   useEffect(() => {
     try {
@@ -338,11 +386,11 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
   }, []);
 
   useEffect(() => {
-    if (board) {
+    if (labelCount > 0) {
       setLastResult(null);
       void checkCliStatus();
     }
-  }, [board, checkCliStatus]);
+  }, [boardsKey, labelCount, checkCliStatus]);
 
   const updateConfig = (patch: Partial<TiMiniCliConfig>) => {
     setConfig((prev) => {
@@ -356,9 +404,21 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
     });
   };
 
-  if (!board) return null;
+  const svgForBoard = (board: Board) => {
+    const root = labelsRootRef.current;
+    if (!root) return null;
+    return (
+      root.querySelector(`[data-label-id="${CSS.escape(board.id)}"] .board-label-qr svg`) || null
+    );
+  };
+
+  if (labelCount === 0) return null;
 
   const isBusy = activeOperation !== 'idle';
+  const titleTag =
+    labelCount === 1
+      ? labelBoards[0].tagId
+      : `${labelCount} labels`;
 
   const handleBrowserPrint = () => {
     window.print();
@@ -366,13 +426,23 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
 
   const handleDownloadPng = async () => {
     try {
-      const svgEl = qrWrapRef.current?.querySelector('svg') || null;
-      const dataUrl = await renderBoardLabelToPngDataUrl(board, unitSystem, svgEl);
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = `label-${board.tagId}.png`;
-      a.click();
-      toast.success(`Saved label-${board.tagId}.png`);
+      for (let i = 0; i < labelBoards.length; i++) {
+        const board = labelBoards[i];
+        const svgEl = svgForBoard(board) as SVGSVGElement | null;
+        const dataUrl = await renderBoardLabelToPngDataUrl(board, unitSystem, svgEl);
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `label-${board.tagId}.png`;
+        a.click();
+        if (i < labelBoards.length - 1) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
+      }
+      toast.success(
+        labelCount === 1
+          ? `Saved label-${labelBoards[0].tagId}.png`
+          : `Saved ${labelCount} label PNGs`
+      );
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to generate label PNG');
     }
@@ -383,36 +453,48 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
     setActiveOperation('printing');
     setLastResult(null);
     setStatusMessage(
-      `Connecting to ${config.bluetooth || 'MXW01'} (darkness ${config.darkness}/5) & sending label...`
+      `Connecting to ${config.bluetooth || 'MXW01'} (darkness ${config.darkness}/5) & sending ${
+        labelCount === 1 ? 'label' : `${labelCount} labels`
+      }...`
     );
 
     try {
-      const svgEl = qrWrapRef.current?.querySelector('svg') || null;
-      const imageBase64 = await renderBoardLabelToPngDataUrl(board, unitSystem, svgEl);
+      let printed = 0;
+      for (const board of labelBoards) {
+        setStatusMessage(
+          `Printing ${board.tagId} (${printed + 1}/${labelCount}) to ${config.bluetooth || 'MXW01'}...`
+        );
+        const svgEl = svgForBoard(board) as SVGSVGElement | null;
+        const imageBase64 = await renderBoardLabelToPngDataUrl(board, unitSystem, svgEl);
 
-      const res = await fetch('/api/timini-print', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'print',
-          imageBase64,
-          bluetooth: config.bluetooth,
-          printerModel: config.printerModel,
-          serial: config.serial,
-          darkness: config.darkness,
-          imageMode: config.imageMode,
-          paper: config.paper,
-          trimSideMargins: false,
-          trimTopBottomMargins: false,
-        }),
-      });
+        const res = await fetch('/api/timini-print', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'print',
+            imageBase64,
+            bluetooth: config.bluetooth,
+            printerModel: config.printerModel,
+            serial: config.serial,
+            darkness: config.darkness,
+            imageMode: config.imageMode,
+            paper: config.paper,
+            trimSideMargins: false,
+            trimTopBottomMargins: false,
+          }),
+        });
 
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || 'TiMini CLI print failed');
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || `TiMini CLI print failed on ${board.tagId}`);
+        }
+        printed += 1;
       }
 
-      const successMsg = `Printed label ${board.tagId} on ${config.bluetooth || 'MXW01'} (darkness ${config.darkness}/5)`;
+      const successMsg =
+        labelCount === 1
+          ? `Printed label ${labelBoards[0].tagId} on ${config.bluetooth || 'MXW01'} (darkness ${config.darkness}/5)`
+          : `Printed ${printed} labels on ${config.bluetooth || 'MXW01'} (darkness ${config.darkness}/5)`;
       setLastResult({ ok: true, message: successMsg });
       setStatusMessage('Print completed');
       toast.success(successMsg);
@@ -517,49 +599,25 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
   return (
     <div data-allow-demo>
       <AppModal
-        open={Boolean(board)}
+        open={labelCount > 0}
         onClose={onClose}
-        title={`Print label · ${board.tagId}`}
-        subtitle="QR encodes the tag ID for the workshop scanner."
-        size="md"
+        title={`Print label · ${titleTag}`}
+        subtitle={
+          isMulti
+            ? `QR encodes each tag ID. System print outputs all ${labelCount} labels.`
+            : 'QR encodes the tag ID for the workshop scanner.'
+        }
+        size={isMulti ? 'xl' : 'md'}
       >
         {/* Visual Preview & Browser Print Target */}
         <div
-          id="timbervault-board-label"
-          className="bg-white text-black rounded-xl border-[3px] border-black print:rounded-none"
+          id="timbervault-board-labels"
+          ref={labelsRootRef}
+          className={`space-y-3 ${isMulti ? 'max-h-[min(50vh,420px)] overflow-y-auto pr-1' : ''}`}
         >
-          <div className="board-label-header bg-black text-white px-4 py-1.5 flex items-center justify-between font-mono">
-            <span className="board-label-brand text-xs font-black tracking-wider">LOGGER</span>
-            <span className="board-label-subtitle text-[10px] font-black text-white tracking-wide">
-              STOCK TAG
-            </span>
-          </div>
-          <div className="board-label-body p-4 flex items-start gap-4">
-            <div ref={qrWrapRef} className="board-label-qr shrink-0 bg-white p-1">
-              <QRCodeSVG
-                value={boardLabelQrValue(board.tagId)}
-                size={145}
-                level="M"
-                includeMargin={false}
-                className="shrink-0"
-                style={{ shapeRendering: 'crispEdges' }}
-              />
-            </div>
-            <div className="board-label-meta min-w-0 flex-1 space-y-2 font-mono border-l-[3px] border-black pl-3.5">
-              <div className="board-label-tag text-2xl font-black tracking-wide border-b-2 border-black pb-1 text-black">
-                {board.tagId}
-              </div>
-              <div className="board-label-species font-sans font-black text-lg text-black leading-tight">
-                {board.species}
-              </div>
-              <div className="board-label-dims text-base font-black text-black leading-tight">
-                {formatDimsLWT(board.length, board.width, board.thickness, unitSystem)}
-              </div>
-              <div className="board-label-loc text-base font-black text-black leading-tight">
-                Loc: {board.location || 'None'}
-              </div>
-            </div>
-          </div>
+          {labelBoards.map((board) => (
+            <LabelCard key={board.id} board={board} unitSystem={unitSystem} />
+          ))}
         </div>
 
         {/* Printer Status Bar */}
@@ -635,7 +693,9 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
               )}
               {activeOperation === 'printing'
                 ? `Printing to ${config.bluetooth || 'MXW01'}...`
-                : `Print Label (${config.bluetooth || 'MXW01'})`}
+                : isMulti
+                  ? `Print ${labelCount} Labels (${config.bluetooth || 'MXW01'})`
+                  : `Print Label (${config.bluetooth || 'MXW01'})`}
             </button>
 
             <button
@@ -643,7 +703,8 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
               onClick={handleBrowserPrint}
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold rounded-xl cursor-pointer border border-gray-700"
             >
-              <Printer className="w-4 h-4" /> System / Browser Print
+              <Printer className="w-4 h-4" />{' '}
+              {isMulti ? `System Print (${labelCount})` : 'System / Browser Print'}
             </button>
           </div>
 
@@ -659,11 +720,16 @@ export default function BoardLabelPrint({ board, unitSystem, onClose }: Props) {
 
             <button
               type="button"
-              onClick={handleDownloadPng}
+              onClick={() => void handleDownloadPng()}
               className="inline-flex items-center gap-1.5 text-sky-400 hover:text-sky-300 font-semibold cursor-pointer"
-              title="Download 384px thermal label PNG"
+              title={
+                isMulti
+                  ? `Download ${labelCount} × 384px thermal label PNGs`
+                  : 'Download 384px thermal label PNG'
+              }
             >
-              <Download className="w-3.5 h-3.5" /> Save PNG
+              <Download className="w-3.5 h-3.5" />{' '}
+              {isMulti ? `Save PNGs (${labelCount})` : 'Save PNG'}
             </button>
           </div>
 

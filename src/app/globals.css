@@ -86,23 +86,38 @@ body > div:first-child:not(.tv-landing) {
     height: auto !important;
   }
 
-  /* Single board QR label — system / browser print (A4) */
-  body:has(#timbervault-board-label) * {
+  /* Board QR labels — system / browser print (A4), supports multi-label */
+  body:has(#timbervault-board-labels) * {
     visibility: hidden !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label,
-  body:has(#timbervault-board-label) #timbervault-board-label * {
+  body:has(#timbervault-board-labels) #timbervault-board-labels,
+  body:has(#timbervault-board-labels) #timbervault-board-labels * {
     visibility: visible !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label {
-    position: fixed !important;
+  body:has(#timbervault-board-labels) #timbervault-board-labels {
+    /* absolute (not fixed) so page-break-after can flow multiple labels */
+    position: absolute !important;
     left: 12mm !important;
     top: 12mm !important;
+    right: auto !important;
     width: 120mm !important;
     max-width: none !important;
+    max-height: none !important;
     margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    z-index: 99999 !important;
+    display: block !important;
+  }
+
+  body:has(#timbervault-board-labels) #timbervault-board-labels .timbervault-board-label {
+    width: 120mm !important;
+    max-width: none !important;
+    margin: 0 0 8mm 0 !important;
     padding: 0 !important;
     overflow: visible !important;
     border-radius: 0 !important;
@@ -110,12 +125,23 @@ body > div:first-child:not(.tv-landing) {
     background: #fff !important;
     color: #000 !important;
     box-shadow: none !important;
-    z-index: 99999 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    break-after: page !important;
+    page-break-after: always !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-header {
+  body:has(#timbervault-board-labels)
+    #timbervault-board-labels
+    .timbervault-board-label:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+    margin-bottom: 0 !important;
+  }
+
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-header {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
@@ -124,28 +150,28 @@ body > div:first-child:not(.tv-landing) {
     padding: 4mm 5mm !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-brand {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-brand {
     font-size: 16pt !important;
     font-weight: 900 !important;
     letter-spacing: 0.08em !important;
     color: #fff !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-subtitle {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-subtitle {
     font-size: 10pt !important;
     font-weight: 900 !important;
     letter-spacing: 0.06em !important;
     color: #fff !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-body {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-body {
     display: flex !important;
     align-items: flex-start !important;
     gap: 5mm !important;
     padding: 5mm !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-qr {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-qr {
     flex-shrink: 0 !important;
     width: 42mm !important;
     height: 42mm !important;
@@ -153,14 +179,14 @@ body > div:first-child:not(.tv-landing) {
     overflow: visible !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-qr svg {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-qr svg {
     width: 42mm !important;
     height: 42mm !important;
     max-width: none !important;
     display: block !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-meta {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-meta {
     flex: 1 1 auto !important;
     min-width: 0 !important;
     border-left: 2.5px solid #000 !important;
@@ -170,7 +196,7 @@ body > div:first-child:not(.tv-landing) {
     gap: 2.5mm !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-tag {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-tag {
     font-size: 22pt !important;
     font-weight: 900 !important;
     line-height: 1.05 !important;
@@ -180,15 +206,15 @@ body > div:first-child:not(.tv-landing) {
     color: #000 !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-species {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-species {
     font-size: 16pt !important;
     font-weight: 900 !important;
     line-height: 1.15 !important;
     color: #000 !important;
   }
 
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-dims,
-  body:has(#timbervault-board-label) #timbervault-board-label .board-label-loc {
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-dims,
+  body:has(#timbervault-board-labels) #timbervault-board-labels .board-label-loc {
     font-size: 13pt !important;
     font-weight: 900 !important;
     line-height: 1.2 !important;
